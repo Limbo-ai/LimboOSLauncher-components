@@ -1,0 +1,1134 @@
+package com.example.limboapp
+
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ResolveInfo
+import android.net.Uri
+import android.os.BatteryManager
+import android.os.Bundle
+import android.os.Process
+import android.os.SystemClock
+import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
+
+data class ColorOption(val name: String, val color: Color)
+
+val AvailableColors = listOf(
+    ColorOption("Black", Color(0xFF000000)), ColorOption("Void", Color(0xFF080808)),
+    ColorOption("Dark Charcoal", Color(0xFF121212)), ColorOption("Onyx", Color(0xFF1A1A1A)),
+    ColorOption("Graphite", Color(0xFF262626)), ColorOption("Slate", Color(0xFF333333)),
+    ColorOption("Ash Gray", Color(0xFF4A4A4A)), ColorOption("Medium Gray", Color(0xFF666666)),
+    ColorOption("Silver", Color(0xFF888888)), ColorOption("Light Gray", Color(0xFFB0B0B0)),
+    ColorOption("Platinum", Color(0xFFE0E0E0)), ColorOption("White", Color(0xFFFFFFFF)),
+
+    ColorOption("Cyber Cyan", Color(0xFF00F0FF)), ColorOption("Electric Cyan", Color(0xFF00E5FF)),
+    ColorOption("Matrix Green", Color(0xFF00FF66)), ColorOption("Acid Green", Color(0xFF39FF14)),
+    ColorOption("Neon Yellow", Color(0xFFFFE600)), ColorOption("Hyper Gold", Color(0xFFFFB700)),
+    ColorOption("Neon Orange", Color(0xFFFF5500)), ColorOption("Neon Pink", Color(0xFFFF007F)),
+    ColorOption("Hot Magenta", Color(0xFFFF00D4)), ColorOption("Electric Blue", Color(0xFF0066FF)),
+    ColorOption("Laser Violet", Color(0xFF8A00FF)), ColorOption("Plasma Red", Color(0xFFFF0800)),
+
+    ColorOption("Deep Red", Color(0xFF4A0000)), ColorOption("Blood Red", Color(0xFF8B0000)),
+    ColorOption("Crimson", Color(0xFFDC143C)), ColorOption("Pure Red", Color(0xFFFF0000)),
+    ColorOption("Ruby", Color(0xFFE0115F)), ColorOption("Coral Red", Color(0xFFFF4040)),
+    ColorOption("Sunset", Color(0xFFFF5722)), ColorOption("Rust", Color(0xFFB7410E)),
+    ColorOption("Maroon", Color(0xFF500000)), ColorOption("Burgundy", Color(0xFF800020)),
+
+    ColorOption("Dark Amber", Color(0xFF4A2800)), ColorOption("Bronze", Color(0xFF8C5000)),
+    ColorOption("Copper", Color(0xFFB87333)), ColorOption("Burnt Orange", Color(0xFFCC5500)),
+    ColorOption("Pure Orange", Color(0xFFFF6600)), ColorOption("Amber", Color(0xFFFF9900)),
+    ColorOption("Gold", Color(0xFFFFD700)), ColorOption("Peach", Color(0xFFFFB380)),
+
+    ColorOption("Abyssal Green", Color(0xFF002200)), ColorOption("Dark Forest", Color(0xFF004D1A)),
+    ColorOption("Forest", Color(0xFF1B5E20)), ColorOption("Emerald", Color(0xFF00A86B)),
+    ColorOption("Pure Green", Color(0xFF00FF00)), ColorOption("Lime", Color(0xFF76FF03)),
+
+    ColorOption("Teal", Color(0xFF008080)), ColorOption("Turquoise", Color(0xFF40E0D0)),
+    ColorOption("Aqua", Color(0xFF00FFFF)), ColorOption("Ice", Color(0xFFE0FFFF)),
+
+    ColorOption("Midnight Navy", Color(0xFF000A1A)), ColorOption("Deep Navy", Color(0xFF001133)),
+    ColorOption("Navy", Color(0xFF000080)), ColorOption("Royal Blue", Color(0xFF1A237E)),
+    ColorOption("Pure Blue", Color(0xFF0000FF)), ColorOption("Sky Blue", Color(0xFF87CEEB)),
+
+    ColorOption("Void Purple", Color(0xFF11001C)), ColorOption("Deep Purple", Color(0xFF311B92)),
+    ColorOption("Dark Violet", Color(0xFF4B0082)), ColorOption("Purple", Color(0xFF800080)),
+    ColorOption("Pure Violet", Color(0xFF8B00FF)), ColorOption("Lilac", Color(0xFFC8A2C8)),
+
+    ColorOption("Radioactive", Color(0xFFC6FF00)), ColorOption("Toxic Violet", Color(0xFFDF00FF)),
+    ColorOption("Vapor Pink", Color(0xFFFF71CE)), ColorOption("Cyber Yellow", Color(0xFFFFF000))
+)
+
+// --- EXAKT 30 HIGH-TECH HINTERGRÜNDE ---
+val BackgroundStylesList = listOf(
+    "Matrix Rain", "Cyber Grid 3D", "Quantum Foam", "Neon Particle Field", "Hexagon Hive",
+    "Hyper Tunnel", "Radar Sweep 3D", "Sine Waveform", "Starfield Warp", "Circuit Trace",
+    "DNA Helix", "Digital Rain", "ASCII Matrix Glitch", "Polygon Mesh", "Binary Stream",
+    "Glitch Overlay", "Solar Pulse", "Laser Scan", "Orbit Ring System", "Vaporwave Grid",
+    "Aurora Waves", "Retro Sun", "Target System", "Crosshair Grid", "Diamond Lattice",
+    "Constellation Network", "Data Stream", "Particle Collision", "Noise Wave", "Minimal Void"
+)
+
+val IconStyles = listOf("Monochrome", "System Icons")
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            LimboLauncherAdvanced()
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LimboLauncherAdvanced() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("limbo_config", Context.MODE_PRIVATE) }
+
+    var refreshTrigger by remember { mutableIntStateOf(0) }
+
+    var bgColorHex by remember { mutableLongStateOf(prefs.getLong("bg_color", Color.Black.value.toLong())) }
+    var bgSecondaryColorHex by remember { mutableLongStateOf(prefs.getLong("bg_sec_color", Color.Black.value.toLong())) }
+    var accentColorHex by remember { mutableLongStateOf(prefs.getLong("accent_color", Color(0xFF00F0FF).value.toLong())) }
+    var accentSecondaryColorHex by remember { mutableLongStateOf(prefs.getLong("accent_sec_color", Color(0xFF8A00FF).value.toLong())) }
+
+    var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Monochrome") ?: "Monochrome") }
+    var bgStyle by remember { mutableStateOf(prefs.getString("bg_style", "Matrix Rain") ?: "Matrix Rain") }
+    var particleCount by remember { mutableIntStateOf(prefs.getInt("particle_count", 30)) }
+
+    val bgColor = Color(bgColorHex.toULong())
+    val bgSecColor = Color(bgSecondaryColorHex.toULong())
+    val accentColor = Color(accentColorHex.toULong())
+    val accentSecColor = Color(accentSecondaryColorHex.toULong())
+
+    val bgGradient = Brush.verticalGradient(colors = listOf(bgColor, bgSecColor))
+    val accentGradient = Brush.verticalGradient(colors = listOf(accentColor, accentSecColor))
+
+    fun saveConfig() {
+        prefs.edit()
+            .putLong("bg_color", bgColorHex)
+            .putLong("bg_sec_color", bgSecondaryColorHex)
+            .putLong("accent_color", accentColorHex)
+            .putLong("accent_sec_color", accentSecondaryColorHex)
+            .putString("icon_style", iconStyle)
+            .putString("bg_style", bgStyle)
+            .putInt("particle_count", particleCount)
+            .apply()
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var showAppDrawer by remember { mutableStateOf(false) }
+    var showConfigMenu by remember { mutableStateOf(false) }
+    var showSysMonitor by remember { mutableStateOf(false) }
+
+    var selectedAppContextMenu by remember { mutableStateOf<ResolveInfo?>(null) }
+
+    BackHandler(enabled = selectedAppContextMenu != null || showAppDrawer || showConfigMenu || showSysMonitor) {
+        when {
+            selectedAppContextMenu != null -> selectedAppContextMenu = null
+            showSysMonitor -> showSysMonitor = false
+            showConfigMenu -> showConfigMenu = false
+            showAppDrawer -> showAppDrawer = false
+        }
+    }
+
+    val installedApps = remember(refreshTrigger) {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val pkgManager = context.packageManager
+        pkgManager.queryIntentActivities(mainIntent, 0).sortedBy {
+            it.loadLabel(pkgManager).toString().lowercase()
+        }
+    }
+
+    val pinnedPackageNames = remember(refreshTrigger) {
+        val savedSet = prefs.getStringSet("pinned_apps", emptySet()) ?: emptySet()
+        mutableStateListOf(*savedSet.toTypedArray())
+    }
+
+    fun savePinnedApps() {
+        prefs.edit().putStringSet("pinned_apps", pinnedPackageNames.toSet()).apply()
+    }
+
+    val pinnedApps = installedApps.filter { pinnedPackageNames.contains(it.activityInfo.packageName) }
+    val filteredApps = installedApps.filter {
+        val appName = it.loadLabel(context.packageManager).toString()
+        appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgGradient)
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+
+            // DOCK / SEITENLEISTE
+            Column(
+                modifier = Modifier
+                    .width(70.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                    .border(1.dp, accentGradient, RectangleShape),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .border(1.dp, accentGradient, RectangleShape)
+                        .clickable {
+                            showConfigMenu = false
+                            showSysMonitor = false
+                            selectedAppContextMenu = null
+                            showAppDrawer = !showAppDrawer
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "[::]",
+                        style = TextStyle(brush = accentGradient),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(1.dp)
+                        .background(accentGradient)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    pinnedApps.forEach { app ->
+                        AppIconView(
+                            appInfo = app,
+                            iconStyle = iconStyle,
+                            accentGradient = accentGradient,
+                            onClick = {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName)
+                                launchIntent?.let { context.startActivity(it) }
+                            },
+                            onLongClick = {
+                                selectedAppContextMenu = app
+                            }
+                        )
+                    }
+                }
+            }
+
+            // HAUPTBEREICH
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(12.dp)
+            ) {
+                when {
+                    showSysMonitor -> {
+                        SystemMonitorOverlay(
+                            accentGradient = accentGradient,
+                            bgColor = bgColor,
+                            onClose = { showSysMonitor = false }
+                        )
+                    }
+                    showConfigMenu -> {
+                        LimboConfigScreen(
+                            bgColor = bgColor,
+                            bgSecColor = bgSecColor,
+                            accentColor = accentColor,
+                            accentSecColor = accentSecColor,
+                            accentGradient = accentGradient,
+                            iconStyle = iconStyle,
+                            bgStyle = bgStyle,
+                            particleCount = particleCount,
+                            onRefreshSystem = { refreshTrigger++ },
+                            onBgColorChange = {
+                                bgColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onBgSecColorChange = {
+                                bgSecondaryColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onAccentColorChange = {
+                                accentColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onAccentSecColorChange = {
+                                accentSecondaryColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onIconStyleChange = {
+                                iconStyle = it
+                                saveConfig()
+                            },
+                            onBgStyleChange = {
+                                bgStyle = it
+                                saveConfig()
+                            },
+                            onParticleCountChange = {
+                                particleCount = it
+                                saveConfig()
+                            },
+                            onClose = { showConfigMenu = false }
+                        )
+                    }
+                    showAppDrawer -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { newValue ->
+                                    searchQuery = newValue
+                                    val queryClean = newValue.trim().lowercase()
+                                    if (queryClean == "limbo config" || queryClean == "config") {
+                                        showConfigMenu = true
+                                    } else if (queryClean == "top" || queryClean == "sys") {
+                                        showSysMonitor = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("App suchen...", color = accentColor.copy(alpha = 0.5f)) },
+                                singleLine = true,
+                                shape = RectangleShape,
+                                textStyle = TextStyle(color = accentColor),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = accentColor,
+                                    unfocusedBorderColor = accentSecColor,
+                                    cursorColor = accentColor
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 75.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(filteredApps) { appInfo ->
+                                    MonochromeAppItem(
+                                        appInfo = appInfo,
+                                        iconStyle = iconStyle,
+                                        accentGradient = accentGradient,
+                                        onClick = {
+                                            val launchIntent = context.packageManager.getLaunchIntentForPackage(appInfo.activityInfo.packageName)
+                                            launchIntent?.let { context.startActivity(it) }
+                                        },
+                                        onLongClick = {
+                                            selectedAppContextMenu = appInfo
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .combinedClickable(
+                                    onClick = { showSysMonitor = true },
+                                    onLongClick = { showConfigMenu = true }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            DynamicBackgroundCanvas(style = bgStyle, density = particleCount, accentGradient = accentGradient)
+
+                            Text(
+                                text = "LIMBO OS V11.0",
+                                style = TextStyle(brush = accentGradient),
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 4.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // APP KONTEXT-MENÜ POPUP
+        selectedAppContextMenu?.let { app ->
+            val pkgName = app.activityInfo.packageName
+            val appLabel = app.loadLabel(context.packageManager).toString()
+            val isPinned = pinnedPackageNames.contains(pkgName)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable { selectedAppContextMenu = null },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(260.dp)
+                        .background(bgColor)
+                        .border(1.dp, accentGradient, RectangleShape)
+                        .padding(16.dp)
+                        .clickable(enabled = false) {},
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = appLabel.uppercase(),
+                        style = TextStyle(brush = accentGradient),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(accentGradient))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            if (isPinned) {
+                                pinnedPackageNames.remove(pkgName)
+                            } else {
+                                pinnedPackageNames.add(pkgName)
+                            }
+                            savePinnedApps()
+                            selectedAppContextMenu = null
+                        },
+                        shape = RectangleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = bgColor),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, accentGradient, RectangleShape)
+                    ) {
+                        Text(
+                            text = if (isPinned) "Aus Leiste entfernen" else "In Leiste pinnen",
+                            style = TextStyle(brush = accentGradient),
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            selectedAppContextMenu = null
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", pkgName, null)
+                            }
+                            context.startActivity(intent)
+                        },
+                        shape = RectangleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = bgColor),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, accentGradient, RectangleShape)
+                    ) {
+                        Text(
+                            text = "App-Informationen",
+                            style = TextStyle(brush = accentGradient),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- DYNAMISCHES RENDER-SYSTEM FÜR 30 VOLLWERTIGE CYBERPUNK-MUSTER ---
+@Composable
+fun DynamicBackgroundCanvas(style: String, density: Int, accentGradient: Brush) {
+    if (style == "Minimal Void") return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "bg_engine")
+    val animVal by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "loop"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val safeDensity = density.coerceIn(5, 100)
+
+        when (style) {
+            "Matrix Rain", "Digital Rain" -> {
+                val cols = (safeDensity / 2).coerceIn(8, 40)
+                val cWidth = w / cols
+                for (i in 0 until cols) {
+                    val x = i * cWidth + cWidth / 2
+                    val speed = (i % 4 + 1) * 0.25f
+                    val y = ((animVal * speed * h + i * 50f) % h)
+                    drawLine(brush = accentGradient, alpha = 0.6f, start = Offset(x, y), end = Offset(x, (y + 80.dp.toPx()) % h), strokeWidth = 2.dp.toPx())
+                }
+            }
+            "Cyber Grid 3D", "Vaporwave Grid" -> {
+                val horizon = h * 0.4f
+                val step = 30.dp.toPx()
+                for (i in -10..10) {
+                    val x1 = w / 2 + i * step * 0.2f
+                    val x2 = w / 2 + i * step * 2.5f
+                    drawLine(brush = accentGradient, alpha = 0.25f, start = Offset(x1, horizon), end = Offset(x2, h), strokeWidth = 1.dp.toPx())
+                }
+                var y = horizon
+                var gap = 5.dp.toPx()
+                while (y < h) {
+                    drawLine(brush = accentGradient, alpha = 0.25f, start = Offset(0f, y), end = Offset(w, y), strokeWidth = 1.dp.toPx())
+                    gap *= 1.25f
+                    y += gap + (animVal * 2.dp.toPx())
+                }
+            }
+            "Quantum Foam", "Noise Wave" -> {
+                val count = safeDensity * 2
+                for (i in 0 until count) {
+                    val rx = (i * 97f) % w
+                    val ry = (i * 131f + animVal * h) % h
+                    val size = (i % 4 + 1).dp.toPx()
+                    drawCircle(brush = accentGradient, alpha = (sin(animVal * 6.28f + i) + 1f) / 2f * 0.4f, radius = size, center = Offset(rx, ry))
+                }
+            }
+            "Neon Particle Field", "Particle Collision" -> {
+                val count = safeDensity
+                val cx = w / 2
+                val cy = h / 2
+                for (i in 0 until count) {
+                    val angle = (i * (360f / count) + animVal * 360f) * (PI / 180f)
+                    val dist = ((i * 12f + animVal * 200f) % (w / 1.5f))
+                    val px = cx + cos(angle).toFloat() * dist
+                    val py = cy + sin(angle).toFloat() * dist
+                    drawCircle(brush = accentGradient, alpha = 0.5f, radius = 3.dp.toPx(), center = Offset(px, py))
+                }
+            }
+            "Hexagon Hive" -> {
+                val count = (safeDensity / 2).coerceIn(4, 25)
+                for (i in 0 until count) {
+                    val cx = (i * 110f) % w
+                    val cy = (i * 170f) % h
+                    val rad = 25.dp.toPx() + sin(animVal * 6.28f + i) * 6.dp.toPx()
+                    drawCircle(brush = accentGradient, alpha = 0.3f, radius = rad, center = Offset(cx, cy), style = Stroke(width = 1.5f.dp.toPx()))
+                }
+            }
+            "Hyper Tunnel", "Orbit Ring System" -> {
+                val center = Offset(w / 2, h / 2)
+                for (i in 1..6) {
+                    val r = ((i * 50.dp.toPx() + animVal * 60.dp.toPx()) % (w / 1.2f))
+                    drawCircle(brush = accentGradient, alpha = (1f - (r / (w / 1.2f))).coerceIn(0f, 0.4f), radius = r, center = center, style = Stroke(width = 2.dp.toPx()))
+                }
+            }
+            "Radar Sweep 3D", "Target System" -> {
+                val center = Offset(w / 2, h / 2)
+                val maxR = w.coerceAtMost(h) * 0.4f
+                drawCircle(brush = accentGradient, alpha = 0.3f, radius = maxR, center = center, style = Stroke(width = 1.dp.toPx()))
+                drawCircle(brush = accentGradient, alpha = 0.2f, radius = maxR * 0.6f, center = center, style = Stroke(width = 1.dp.toPx()))
+                val angle = animVal * 2f * PI.toFloat()
+                val endX = center.x + cos(angle) * maxR
+                val endY = center.y + sin(angle) * maxR
+                drawLine(brush = accentGradient, alpha = 0.6f, start = center, end = Offset(endX, endY), strokeWidth = 2.dp.toPx())
+            }
+            "Sine Waveform", "Aurora Waves" -> {
+                val path = Path()
+                val steps = 30
+                val pStep = w / steps
+                for (j in 0..2) {
+                    val yOff = h * (0.35f + j * 0.15f)
+                    path.reset()
+                    for (i in 0..steps) {
+                        val x = i * pStep
+                        val y = yOff + sin(animVal * 6.28f + i * 0.3f + j) * 40.dp.toPx()
+                        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(path = path, brush = accentGradient, alpha = 0.4f, style = Stroke(width = 2.dp.toPx()))
+                }
+            }
+            "Starfield Warp" -> {
+                val count = safeDensity * 2
+                val center = Offset(w / 2, h / 2)
+                for (i in 0 until count) {
+                    val angle = (i * 137.5f) * (PI / 180f)
+                    val speed = (i % 5 + 1) * 0.2f
+                    val dist = ((animVal * speed * w) + i * 10f) % (w / 2)
+                    val px = center.x + cos(angle).toFloat() * dist
+                    val py = center.y + sin(angle).toFloat() * dist
+                    drawCircle(brush = accentGradient, alpha = (dist / (w / 2)).coerceIn(0.1f, 0.7f), radius = 2.dp.toPx(), center = Offset(px, py))
+                }
+            }
+            "Circuit Trace" -> {
+                val step = 60.dp.toPx()
+                var x = 0f
+                while (x < w) {
+                    var y = 0f
+                    while (y < h) {
+                        if ((x + y).toInt() % 3 == 0) {
+                            drawLine(brush = accentGradient, alpha = 0.25f, start = Offset(x, y), end = Offset(x + step * 0.5f, y), strokeWidth = 1.5f.dp.toPx())
+                            drawLine(brush = accentGradient, alpha = 0.25f, start = Offset(x + step * 0.5f, y), end = Offset(x + step * 0.5f, y + step * 0.5f), strokeWidth = 1.5f.dp.toPx())
+                            drawCircle(brush = accentGradient, alpha = 0.4f, radius = 3.dp.toPx(), center = Offset(x + step * 0.5f, y + step * 0.5f))
+                        }
+                        y += step
+                    }
+                    x += step
+                }
+            }
+            "DNA Helix" -> {
+                val count = 20
+                val pStep = h / count
+                for (i in 0..count) {
+                    val y = i * pStep
+                    val off1 = sin(animVal * 6.28f + i * 0.4f) * 60.dp.toPx()
+                    val off2 = -off1
+                    val x1 = w / 2 + off1
+                    val x2 = w / 2 + off2
+                    drawCircle(brush = accentGradient, alpha = 0.6f, radius = 4.dp.toPx(), center = Offset(x1, y))
+                    drawCircle(brush = accentGradient, alpha = 0.6f, radius = 4.dp.toPx(), center = Offset(x2, y))
+                    drawLine(brush = accentGradient, alpha = 0.2f, start = Offset(x1, y), end = Offset(x2, y), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "ASCII Matrix Glitch", "Glitch Overlay" -> {
+                val step = 40.dp.toPx()
+                val offsetG = animVal * step
+                var y = 0f
+                while (y < h) {
+                    val glitchX = ((y * 13f + animVal * 500f) % w)
+                    drawRect(brush = accentGradient, alpha = 0.3f, topLeft = Offset(glitchX, y), size = Size(30.dp.toPx(), 4.dp.toPx()))
+                    y += step
+                }
+            }
+            "Polygon Mesh", "Constellation Network" -> {
+                val count = (safeDensity / 2).coerceIn(8, 30)
+                val points = List(count) { i ->
+                    Offset((i * 127f) % w, (i * 211f + animVal * 50f) % h)
+                }
+                for (i in 0 until count) {
+                    drawCircle(brush = accentGradient, alpha = 0.5f, radius = 3.dp.toPx(), center = points[i])
+                    for (j in i + 1 until count) {
+                        val d = (points[i] - points[j]).getDistance()
+                        if (d < 180.dp.toPx()) {
+                            drawLine(brush = accentGradient, alpha = (1f - d / 180.dp.toPx()) * 0.25f, start = points[i], end = points[j], strokeWidth = 1.dp.toPx())
+                        }
+                    }
+                }
+            }
+            "Binary Stream", "Data Stream" -> {
+                val cols = (safeDensity / 3).coerceIn(5, 20)
+                val cWidth = w / cols
+                for (i in 0 until cols) {
+                    val x = i * cWidth + cWidth / 2
+                    val y = ((animVal * h * 1.5f + i * 80f) % h)
+                    drawRect(brush = accentGradient, alpha = 0.4f, topLeft = Offset(x, y), size = Size(8.dp.toPx(), 16.dp.toPx()))
+                }
+            }
+            "Solar Pulse" -> {
+                val center = Offset(w / 2, h / 2)
+                val pulse = sin(animVal * 6.28f) * 20.dp.toPx()
+                val baseR = 60.dp.toPx() + pulse
+                drawCircle(brush = accentGradient, alpha = 0.3f, radius = baseR, center = center)
+                drawCircle(brush = accentGradient, alpha = 0.15f, radius = baseR * 1.5f, center = center)
+            }
+            "Laser Scan" -> {
+                val scanY = animVal * h
+                drawLine(brush = accentGradient, alpha = 0.8f, start = Offset(0f, scanY), end = Offset(w, scanY), strokeWidth = 3.dp.toPx())
+                drawRect(brush = accentGradient, alpha = 0.1f, topLeft = Offset(0f, (scanY - 40.dp.toPx()).coerceAtLeast(0f)), size = Size(w, 40.dp.toPx()))
+            }
+            "Retro Sun" -> {
+                val center = Offset(w / 2, h * 0.4f)
+                val rad = 80.dp.toPx()
+                drawCircle(brush = accentGradient, alpha = 0.4f, radius = rad, center = center)
+                for (i in 0..6) {
+                    val lineY = center.y + (i * 12.dp.toPx()) + (animVal * 12.dp.toPx()) % 12.dp.toPx()
+                    if (lineY < center.y + rad) {
+                        drawLine(brush = accentGradient, alpha = 0.6f, start = Offset(center.x - rad, lineY), end = Offset(center.x + rad, lineY), strokeWidth = 3.dp.toPx())
+                    }
+                }
+            }
+            "Crosshair Grid", "Diamond Lattice" -> {
+                val step = 50.dp.toPx()
+                var x = 0f
+                while (x < w) {
+                    var y = 0f
+                    while (y < h) {
+                        drawLine(brush = accentGradient, alpha = 0.2f, start = Offset(x - 4, y), end = Offset(x + 4, y), strokeWidth = 1.dp.toPx())
+                        drawLine(brush = accentGradient, alpha = 0.2f, start = Offset(x, y - 4), end = Offset(x, y + 4), strokeWidth = 1.dp.toPx())
+                        y += step
+                    }
+                    x += step
+                }
+            }
+            else -> {
+                val count = safeDensity
+                for (i in 0 until count) {
+                    val x = (i * 83f) % w
+                    val y = ((animVal * h + i * 30f) % h)
+                    drawRect(brush = accentGradient, alpha = 0.25f, topLeft = Offset(x, y), size = Size(4.dp.toPx(), 4.dp.toPx()))
+                }
+            }
+        }
+    }
+}
+
+// --- SYSTEM MONITOR DASHBOARD ---
+@Composable
+fun SystemMonitorOverlay(
+    accentGradient: Brush,
+    bgColor: Color,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    var memoryUsage by remember { mutableStateOf("Berechne...") }
+    var batteryLevel by remember { mutableIntStateOf(0) }
+    var uptimeString by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val runtime = Runtime.getRuntime()
+        val usedMemMB = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        val maxMemMB = runtime.maxMemory() / (1024 * 1024)
+        memoryUsage = "$usedMemMB MB / $maxMemMB MB"
+
+        val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        batteryLevel = if (level != -1 && scale != -1) ((level.toFloat() / scale.toFloat()) * 100).toInt() else 0
+
+        val uptimeSec = SystemClock.elapsedRealtime() / 1000
+        val hours = uptimeSec / 3600
+        val mins = (uptimeSec % 3600) / 60
+        uptimeString = "${hours}h ${mins}m"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentGradient, RectangleShape)
+            .background(bgColor)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SYSTEM STATUS [DEBUG]",
+                style = TextStyle(brush = accentGradient),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                modifier = Modifier.border(1.dp, accentGradient, RectangleShape)
+            ) {
+                Text("X", style = TextStyle(brush = accentGradient))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("• HEAP RAM: $memoryUsage", style = TextStyle(brush = accentGradient), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• BATTERY: $batteryLevel%", style = TextStyle(brush = accentGradient), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• UPTIME: $uptimeString", style = TextStyle(brush = accentGradient), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• CPU THREADS: ${Runtime.getRuntime().availableProcessors()}", style = TextStyle(brush = accentGradient), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• PID: ${Process.myPid()}", style = TextStyle(brush = accentGradient), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(accentGradient)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "KERNEL STATUS: OK\nSHELL: ARCH/LINUX EMULATION\nREADY FOR TERMINAL COMMANDS...",
+            style = TextStyle(brush = accentGradient),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp
+        )
+    }
+}
+
+// --- CONFIGURATION SCREEN (FEHLERFREI & OPTIMIERT) ---
+@Composable
+fun LimboConfigScreen(
+    bgColor: Color,
+    bgSecColor: Color,
+    accentColor: Color,
+    accentSecColor: Color,
+    accentGradient: Brush,
+    iconStyle: String,
+    bgStyle: String,
+    particleCount: Int,
+    onRefreshSystem: () -> Unit,
+    onBgColorChange: (Color) -> Unit,
+    onBgSecColorChange: (Color) -> Unit,
+    onAccentColorChange: (Color) -> Unit,
+    onAccentSecColorChange: (Color) -> Unit,
+    onIconStyleChange: (String) -> Unit,
+    onBgStyleChange: (String) -> Unit,
+    onParticleCountChange: (Int) -> Unit,
+    onClose: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    // Lokaler Zustand für flüssiges Slider-Dragging ohne Ruckeln
+    var sliderPosition by remember { mutableFloatStateOf(particleCount.toFloat()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentGradient, RectangleShape)
+            .padding(12.dp)
+            .verticalScroll(scrollState)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "LIMBO CONFIG V11.0",
+                style = TextStyle(brush = accentGradient),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                modifier = Modifier.border(1.dp, accentGradient, RectangleShape)
+            ) {
+                Text("X", style = TextStyle(brush = accentGradient))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = onRefreshSystem,
+            shape = RectangleShape,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .border(1.dp, accentGradient, RectangleShape)
+        ) {
+            Text(
+                text = "[ ↻ SYSTEM REFRESH / APPS NEU LADEN ]",
+                style = TextStyle(brush = accentGradient),
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(accentGradient))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 30 HINTERGRUND-MUSTER SELEKTOR
+        Text("Hintergrund-Stil auswählen (30 Varianten):", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        
+        // Dynamische Höhe verhindert Verschachtelungs-Scroll-Fehler
+        val gridHeight = (BackgroundStylesList.size / 2 * 42).dp
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            userScrollEnabled = false,
+            modifier = Modifier.height(gridHeight).padding(top = 4.dp)
+        ) {
+            items(BackgroundStylesList) { style ->
+                Button(
+                    onClick = { onBgStyleChange(style) },
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    modifier = Modifier.border(if (bgStyle == style) 2.dp else 1.dp, accentGradient, RectangleShape),
+                    contentPadding = PaddingValues(4.dp)
+                ) {
+                    Text(
+                        text = style,
+                        style = TextStyle(brush = accentGradient),
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // REPARIERTER SLIDER
+        Text("Hintergrund Element-Dichte: ${sliderPosition.toInt()}", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Slider(
+            value = sliderPosition,
+            onValueChange = { sliderPosition = it },
+            onValueChangeFinished = { onParticleCountChange(sliderPosition.toInt()) },
+            valueRange = 5f..100f,
+            colors = SliderDefaults.colors(
+                thumbColor = accentColor,
+                activeTrackColor = accentColor,
+                inactiveTrackColor = accentSecColor.copy(alpha = 0.3f)
+            )
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text("Icon Style:", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            IconStyles.forEach { style ->
+                Button(
+                    onClick = { onIconStyleChange(style) },
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    modifier = Modifier.border(if (iconStyle == style) 2.dp else 1.dp, accentGradient, RectangleShape)
+                ) {
+                    Text(style, style = TextStyle(brush = accentGradient), fontSize = 11.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // FARBVERSCHMELZUNG (AKZENT)
+        Text("Primäre Akzentfarbe (Oben):", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        val colorGridHeight = (AvailableColors.size / 10 * 28).dp
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(10),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            userScrollEnabled = false,
+            modifier = Modifier.height(colorGridHeight).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (accentColor == item.color) 3.dp else 1.dp, Color.White, RectangleShape)
+                        .clickable { onAccentColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text("Sekundäre Akzentfarbe (Unten / Verschmelzung):", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(10),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            userScrollEnabled = false,
+            modifier = Modifier.height(colorGridHeight).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (accentSecColor == item.color) 3.dp else 1.dp, Color.White, RectangleShape)
+                        .clickable { onAccentSecColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // FARBVERSCHMELZUNG (HINTERGRUND)
+        Text("Primäre Hintergrundfarbe (Oben):", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(10),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            userScrollEnabled = false,
+            modifier = Modifier.height(colorGridHeight).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (bgColor == item.color) 3.dp else 1.dp, Color.White, RectangleShape)
+                        .clickable { onBgColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text("Sekundäre Hintergrundfarbe (Unten / Verschmelzung):", style = TextStyle(brush = accentGradient), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(10),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            userScrollEnabled = false,
+            modifier = Modifier.height(colorGridHeight).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (bgSecColor == item.color) 3.dp else 1.dp, Color.White, RectangleShape)
+                        .clickable { onBgSecColorChange(item.color) }
+                )
+            }
+        }
+    }
+}
+
+// --- APP ICON COMPONENT ---
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AppIconView(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    accentGradient: Brush,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = remember(appInfo) { appInfo.loadLabel(context.packageManager).toString() }
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .border(1.dp, accentGradient, RectangleShape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (iconStyle == "System Icons") {
+            var iconBitmap by remember(appInfo) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+
+            LaunchedEffect(appInfo) {
+                try {
+                    val drawable = appInfo.loadIcon(context.packageManager)
+                    iconBitmap = drawable.toBitmap().asImageBitmap()
+                } catch (_: Exception) {
+                    iconBitmap = null
+                }
+            }
+
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap!!,
+                    contentDescription = appName,
+                    modifier = Modifier.size(34.dp)
+                )
+            } else {
+                Text(
+                    text = nameToInitials(appName),
+                    style = TextStyle(brush = accentGradient),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        } else {
+            Text(
+                text = nameToInitials(appName),
+                style = TextStyle(brush = accentGradient),
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun MonochromeAppItem(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    accentGradient: Brush,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = remember(appInfo) { appInfo.loadLabel(context.packageManager).toString() }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(4.dp)
+    ) {
+        AppIconView(
+            appInfo = appInfo,
+            iconStyle = iconStyle,
+            accentGradient = accentGradient,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = appName,
+            style = TextStyle(brush = accentGradient),
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+fun nameToInitials(name: String): String {
+    return name.take(1).uppercase()
+}

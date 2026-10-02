@@ -1,0 +1,633 @@
+package com.example.limboapp
+
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.ResolveInfo
+import android.graphics.drawable.Drawable
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
+
+// --- ERWEITERTE FARBPALETTE ---
+data class ColorOption(val name: String, val color: Color)
+
+val AvailableColors = listOf(
+    ColorOption("Black", Color(0xFF000000)),
+    ColorOption("Dark Gray", Color(0xFF121212)),
+    ColorOption("Deep Navy", Color(0xFF0A0E17)),
+    ColorOption("White", Color(0xFFFFFFFF)),
+    ColorOption("Pure Red", Color(0xFFFF0033)),
+    ColorOption("Neon Pink", Color(0xFFFF007F)),
+    ColorOption("Hot Purple", Color(0xFFA000FF)),
+    ColorOption("Electric Blue", Color(0xFF0066FF)),
+    ColorOption("Cyan Cyber", Color(0xFF00F0FF)),
+    ColorOption("Matrix Green", Color(0xFF00FF66)),
+    ColorOption("Lime Green", Color(0xFF76FF03)),
+    ColorOption("Neon Yellow", Color(0xFFFFE600)),
+    ColorOption("Bright Orange", Color(0xFFFF5500)),
+    ColorOption("Soft Mint", Color(0xFFA8FFE8)),
+    ColorOption("Pastel Lilac", Color(0xFFE1BEE7))
+)
+
+// SYMBOLE FÜR HINTERGRÜNDE
+val BackgroundStyles = listOf("✦", "░", "⬡", "═", "◌", "∿", "𐓷", "✕")
+val IconStyles = listOf("Monochrome", "System Icons")
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            LimboLauncherAdvanced()
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LimboLauncherAdvanced() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("limbo_config", Context.MODE_PRIVATE) }
+
+    var bgColorHex by remember { mutableStateOf(prefs.getLong("bg_color", Color.Black.value.toLong())) }
+    var accentColorHex by remember { mutableStateOf(prefs.getLong("accent_color", Color.White.value.toLong())) }
+    var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Monochrome") ?: "Monochrome") }
+    var bgAnimation by remember { mutableStateOf(prefs.getString("bg_anim", "✦") ?: "✦") }
+
+    val bgColor = Color(bgColorHex.toULong())
+    val accentColor = Color(accentColorHex.toULong())
+
+    fun saveConfig() {
+        prefs.edit()
+            .putLong("bg_color", bgColorHex)
+            .putLong("accent_color", accentColorHex)
+            .putString("icon_style", iconStyle)
+            .putString("bg_anim", bgAnimation)
+            .apply()
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var showAppDrawer by remember { mutableStateOf(false) }
+    var showConfigMenu by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showAppDrawer || showConfigMenu) {
+        if (showConfigMenu) {
+            showConfigMenu = false
+        } else if (showAppDrawer) {
+            showAppDrawer = false
+        }
+    }
+
+    val installedApps = remember {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val pkgManager = context.packageManager
+        pkgManager.queryIntentActivities(mainIntent, 0).sortedBy {
+            it.loadLabel(pkgManager).toString().lowercase()
+        }
+    }
+
+    val pinnedPackageNames = remember {
+        val savedSet = prefs.getStringSet("pinned_apps", emptySet()) ?: emptySet()
+        mutableStateListOf(*savedSet.toTypedArray())
+    }
+
+    fun savePinnedApps() {
+        prefs.edit().putStringSet("pinned_apps", pinnedPackageNames.toSet()).apply()
+    }
+
+    val pinnedApps = installedApps.filter { pinnedPackageNames.contains(it.activityInfo.packageName) }
+    val filteredApps = installedApps.filter {
+        val appName = it.loadLabel(context.packageManager).toString()
+        appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = bgColor
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+
+            // DOCK / SEITENLEISTE
+            Column(
+                modifier = Modifier
+                    .width(70.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                    .background(bgColor, RectangleShape)
+                    .border(1.dp, accentColor, RectangleShape),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape)
+                        .combinedClickable(
+                            onClick = { 
+                                showConfigMenu = false
+                                showAppDrawer = !showAppDrawer 
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "[::]",
+                        color = accentColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(1.dp)
+                        .background(accentColor)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    pinnedApps.forEach { app ->
+                        AppIconView(
+                            appInfo = app,
+                            iconStyle = iconStyle,
+                            bgColor = bgColor,
+                            accentColor = accentColor,
+                            onClick = {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName)
+                                launchIntent?.let { context.startActivity(it) }
+                            },
+                            onLongClick = {
+                                pinnedPackageNames.remove(app.activityInfo.packageName)
+                                savePinnedApps()
+                            }
+                        )
+                    }
+                }
+            }
+
+            // HAUPTBEREICH
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(12.dp)
+            ) {
+                when {
+                    showConfigMenu -> {
+                        LimboConfigScreen(
+                            bgColor = bgColor,
+                            accentColor = accentColor,
+                            iconStyle = iconStyle,
+                            bgAnimation = bgAnimation,
+                            onBgColorChange = { 
+                                bgColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onAccentColorChange = { 
+                                accentColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onIconStyleChange = {
+                                iconStyle = it
+                                saveConfig()
+                            },
+                            onBgAnimChange = {
+                                bgAnimation = it
+                                saveConfig()
+                            },
+                            onClose = { showConfigMenu = false }
+                        )
+                    }
+                    showAppDrawer -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { 
+                                    searchQuery = it 
+                                    if (it.trim().lowercase() == "limbo config") {
+                                        showConfigMenu = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("App suchen... (oder 'Limbo Config')", color = accentColor.copy(alpha = 0.5f)) },
+                                singleLine = true,
+                                shape = RectangleShape,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = accentColor,
+                                    unfocusedBorderColor = accentColor,
+                                    focusedTextColor = accentColor,
+                                    unfocusedTextColor = accentColor,
+                                    cursorColor = accentColor
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if ("limbo config".contains(searchQuery.lowercase()) && searchQuery.isNotEmpty()) {
+                                Button(
+                                    onClick = { showConfigMenu = true },
+                                    shape = RectangleShape,
+                                    colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Text("⚙️ Limbo Config öffnen", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 75.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(filteredApps) { appInfo ->
+                                    MonochromeAppItem(
+                                        appInfo = appInfo,
+                                        iconStyle = iconStyle,
+                                        bgColor = bgColor,
+                                        accentColor = accentColor,
+                                        onClick = {
+                                            val launchIntent = context.packageManager.getLaunchIntentForPackage(appInfo.activityInfo.packageName)
+                                            launchIntent?.let { context.startActivity(it) }
+                                        },
+                                        onLongClick = {
+                                            val pkg = appInfo.activityInfo.packageName
+                                            if (!pinnedPackageNames.contains(pkg)) {
+                                                pinnedPackageNames.add(pkg)
+                                                savePinnedApps()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        AnimatedBackground(symbol = bgAnimation, accentColor = accentColor)
+
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "LIMBO OS",
+                                color = accentColor,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 4.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- ENGINE FÜR ANIMIERTE HINTERGRÜNDE UND SYMBOLE ---
+@Composable
+fun AnimatedBackground(symbol: String, accentColor: Color) {
+    if (symbol == "✕") return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "bg_engine")
+    val animVal by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "loop"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        when (symbol) {
+            "✦" -> { // Sterne / Cosmos
+                val stars = List(50) { Offset(Random(it).nextFloat(), Random(it * 2).nextFloat()) to (Random(it * 3).nextFloat() * 2.5f + 1f) }
+                stars.forEach { (pos, radius) ->
+                    val alpha = (sin((animVal * 6.28f) + pos.x * 10f) + 1f) / 2f
+                    drawCircle(color = accentColor.copy(alpha = alpha * 0.7f), radius = radius.dp.toPx(), center = Offset(pos.x * size.width, pos.y * size.height))
+                }
+            }
+            "░" -> { // Matrix Rain
+                val drops = List(30) { Random(it).nextFloat() }
+                drops.forEachIndexed { i, startX ->
+                    val y = ((animVal + i * 0.08f) % 1f) * size.height
+                    drawCircle(color = accentColor.copy(alpha = 0.8f), radius = 2.dp.toPx(), center = Offset(startX * size.width, y))
+                }
+            }
+            "⬡" -> { // Hexagon Matrix Grid
+                val radius = 30.dp.toPx()
+                val hexWidth = radius * 1.732f
+                val hexHeight = radius * 2f
+                var y = 0f
+                var row = 0
+                while (y < size.height + hexHeight) {
+                    var x = if (row % 2 == 0) 0f else hexWidth / 2f
+                    while (x < size.width + hexWidth) {
+                        val pulse = (sin(animVal * 6.28f + (x + y) * 0.01f) + 1f) / 2f
+                        drawCircle(color = accentColor.copy(alpha = pulse * 0.2f), radius = 2.dp.toPx(), center = Offset(x, y))
+                        x += hexWidth
+                    }
+                    y += hexHeight * 0.75f
+                    row++
+                }
+            }
+            "═" -> { // Cyber Wave Grid
+                val step = 50.dp.toPx()
+                val offsetAnim = animVal * step
+                var y = offsetAnim
+                while (y < size.height) {
+                    drawLine(color = accentColor.copy(alpha = 0.15f), start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    y += step
+                }
+            }
+            "◌" -> { // Ripple Radar Wave
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val maxRadius = size.width.coerceAtLeast(size.height) * 0.7f
+                for (i in 0..2) {
+                    val r = ((animVal + i * 0.33f) % 1f) * maxRadius
+                    val alpha = (1f - (r / maxRadius)).coerceIn(0f, 1f)
+                    drawCircle(color = accentColor.copy(alpha = alpha * 0.3f), radius = r, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                }
+            }
+            "∿" -> { // Frequenz-Wellen
+                val points = 30
+                val dx = size.width / points
+                for (i in 0 until points) {
+                    val x1 = i * dx
+                    val y1 = size.height / 2f + sin(animVal * 6.28f + i * 0.3f) * 40.dp.toPx()
+                    val x2 = (i + 1) * dx
+                    val y2 = size.height / 2f + sin(animVal * 6.28f + (i + 1) * 0.3f) * 40.dp.toPx()
+                    drawLine(color = accentColor.copy(alpha = 0.4f), start = Offset(x1, y1), end = Offset(x2, y2), strokeWidth = 2.dp.toPx())
+                }
+            }
+            "𐓷" -> { // Warp Speed Stars
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val particles = List(40) { Random(it).nextFloat() to Random(it * 3).nextFloat() * 6.28f }
+                particles.forEach { (speed, angle) ->
+                    val dist = ((animVal * speed) % 1f) * size.width * 0.6f
+                    val x = center.x + cos(angle) * dist
+                    val y = center.y + sin(angle) * dist
+                    drawCircle(color = accentColor.copy(alpha = (dist / (size.width * 0.6f)) * 0.7f), radius = 2.dp.toPx(), center = Offset(x, y))
+                }
+            }
+        }
+    }
+}
+
+// --- CONFIGURATION SCREEN ---
+@Composable
+fun LimboConfigScreen(
+    bgColor: Color,
+    accentColor: Color,
+    iconStyle: String,
+    bgAnimation: String,
+    onBgColorChange: (Color) -> Unit,
+    onAccentColorChange: (Color) -> Unit,
+    onIconStyleChange: (String) -> Unit,
+    onBgAnimChange: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentColor, RectangleShape)
+            .padding(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "LIMBO CONFIG",
+                color = accentColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor)
+            ) {
+                Text("X")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // ICON STYLE SELECTION
+        Text("Icon Pack / Style:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            IconStyles.forEach { style ->
+                Button(
+                    onClick = { onIconStyleChange(style) },
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (iconStyle == style) accentColor else bgColor,
+                        contentColor = if (iconStyle == style) bgColor else accentColor
+                    ),
+                    modifier = Modifier.border(1.dp, accentColor, RectangleShape)
+                ) {
+                    Text(style, fontSize = 11.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // SYMBOL HINTERGRUND-WAHL
+        Text("Hintergrund-Effekte (Symbol):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(4),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.height(80.dp).padding(top = 4.dp)
+        ) {
+            items(BackgroundStyles) { symbol ->
+                Box(
+                    modifier = Modifier
+                        .height(36.dp)
+                        .background(if (bgAnimation == symbol) accentColor else bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape)
+                        .clickable { onBgAnimChange(symbol) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = symbol,
+                        color = if (bgAnimation == symbol) bgColor else accentColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text("Hauptfarbe (Hintergrund):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(5),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.height(85.dp).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (bgColor == item.color) 3.dp else 1.dp, accentColor, RectangleShape)
+                        .clickable { onBgColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text("Akzentfarbe (Text / Ränder):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(5),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.height(85.dp).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (accentColor == item.color) 3.dp else 1.dp, bgColor, RectangleShape)
+                        .clickable { onAccentColorChange(item.color) }
+                )
+            }
+        }
+    }
+}
+
+// --- APP ICON COMPONENT ---
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AppIconView(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = appInfo.loadLabel(context.packageManager).toString()
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(bgColor, RectangleShape)
+            .border(1.dp, accentColor, RectangleShape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (iconStyle == "System Icons") {
+            val iconDrawable: Drawable = remember(appInfo) {
+                appInfo.loadIcon(context.packageManager)
+            }
+            Image(
+                bitmap = iconDrawable.toBitmap().asImageBitmap(),
+                contentDescription = appName,
+                modifier = Modifier.size(36.dp)
+            )
+        } else {
+            Text(
+                text = nameToInitials(appName),
+                color = accentColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun MonochromeAppItem(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = appInfo.loadLabel(context.packageManager).toString()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(4.dp)
+    ) {
+        AppIconView(
+            appInfo = appInfo,
+            iconStyle = iconStyle,
+            bgColor = bgColor,
+            accentColor = accentColor,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = appName,
+            color = accentColor,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+fun nameToInitials(name: String): String {
+    return name.take(1).uppercase()
+}

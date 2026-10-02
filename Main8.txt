@@ -1,0 +1,857 @@
+package com.example.limboapp
+
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.ResolveInfo
+import android.graphics.drawable.Drawable
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
+
+// --- 60 ERWEITERTE FARBPALETTE ---
+data class ColorOption(val name: String, val color: Color)
+
+val AvailableColors = listOf(
+    // Monochrome & Grayscale (1-6)
+    ColorOption("Pure Black", Color(0xFF000000)),
+    ColorOption("Dark Charcoal", Color(0xFF121212)),
+    ColorOption("Onyx", Color(0xFF1E1E1E)),
+    ColorOption("Slate Gray", Color(0xFF4A4A4A)),
+    ColorOption("Silver Light", Color(0xFFD1D1D1)),
+    ColorOption("Pure White", Color(0xFFFFFFFF)),
+
+    // Cyber & Neon (7-12)
+    ColorOption("Cyber Cyan", Color(0xFF00F0FF)),
+    ColorOption("Matrix Green", Color(0xFF00FF66)),
+    ColorOption("Neon Pink", Color(0xFFFF007F)),
+    ColorOption("Electric Blue", Color(0xFF0066FF)),
+    ColorOption("Neon Yellow", Color(0xFFFFE600)),
+    ColorOption("Acid Lime", Color(0xFF76FF03)),
+
+    // Reds & Corals (13-18)
+    ColorOption("Pure Red", Color(0xFFFF0033)),
+    ColorOption("Crimson Dark", Color(0xFF8B0000)),
+    ColorOption("Blood Orange", Color(0xFFFF3300)),
+    ColorOption("Coral Pink", Color(0xFFFF6B6B)),
+    ColorOption("Sunset Orange", Color(0xFFFF5500)),
+    ColorOption("Peach Gold", Color(0xFFFFB347)),
+
+    // Purples & Violets (19-24)
+    ColorOption("Hot Purple", Color(0xFFA000FF)),
+    ColorOption("Deep Violet", Color(0xFF4B0082)),
+    ColorOption("Royal Magenta", Color(0xFFD800A6)),
+    ColorOption("Soft Violet", Color(0xFFB19FF9)),
+    ColorOption("Pastel Lilac", Color(0xFFE1BEE7)),
+    ColorOption("Plum Night", Color(0xFF2A0845)),
+
+    // Blues & Navy (25-30)
+    ColorOption("Deep Navy", Color(0xFF0A0E17)),
+    ColorOption("Midnight Blue", Color(0xFF001133)),
+    ColorOption("Ocean Teal", Color(0xFF008080)),
+    ColorOption("Ice Blue", Color(0xFFA0E7E5)),
+    ColorOption("Sky Blue", Color(0xFF87CEEB)),
+    ColorOption("Royal Blue", Color(0xFF1A237E)),
+
+    // Greens & Mints (31-36)
+    ColorOption("Dark Emerald", Color(0xFF004D40)),
+    ColorOption("Forest Green", Color(0xFF1B5E20)),
+    ColorOption("Soft Mint", Color(0xFFA8FFE8)),
+    ColorOption("Jade Green", Color(0xFF00A86B)),
+    ColorOption("Olive Dark", Color(0xFF333300)),
+    ColorOption("Seafoam", Color(0xFF93E9BE)),
+
+    // Earth & Warm Tones (37-42)
+    ColorOption("Deep Bronze", Color(0xFF4E3629)),
+    ColorOption("Copper Gold", Color(0xFFB87333)),
+    ColorOption("Desert Sand", Color(0xFFEDC9AF)),
+    ColorOption("Warm Amber", Color(0xFFFFBF00)),
+    ColorOption("Terracotta", Color(0xFFE2725B)),
+    ColorOption("Coffee Brown", Color(0xFF3B2F2F)),
+
+    // High Contrast Specials (43-48)
+    ColorOption("Toxic Green", Color(0xFF39FF14)),
+    ColorOption("Hyper Yellow", Color(0xFFFFFF00)),
+    ColorOption("Vapor Pink", Color(0xFFFF71CE)),
+    ColorOption("Ultra Violet", Color(0xFF6B5B95)),
+    ColorOption("Plasma Blue", Color(0xFF01CDFE)),
+    ColorOption("Laser Red", Color(0xFFFF0800)),
+
+    // Muted & Pastel (49-54)
+    ColorOption("Muted Gray Blue", Color(0xFF4F5D75)),
+    ColorOption("Pastel Green", Color(0xFF77DD77)),
+    ColorOption("Pastel Yellow", Color(0xFFFDFD96)),
+    ColorOption("Pastel Blue", Color(0xFFAEC6CF)),
+    ColorOption("Dusty Rose", Color(0xFFDCAE96)),
+    ColorOption("Slate Dark", Color(0xFF2D3748)),
+
+    // Deep Dark Variants (55-60)
+    ColorOption("Abyssal Black", Color(0xFF050505)),
+    ColorOption("Void Purple", Color(0xFF11001C)),
+    ColorOption("Deep Cyber Blue", Color(0xFF031926)),
+    ColorOption("Dark Crimson", Color(0xFF1A0003)),
+    ColorOption("Dark Matrix", Color(0xFF001A08)),
+    ColorOption("Pitch Slate", Color(0xFF101419))
+)
+
+// 24 SYMBOLE FÜR HINTERGRÜNDE
+val BackgroundStyles = listOf(
+    "✦", "░", "⬡", "═", "◌", "∿", "𐓷", "✕",
+    "❖", "▲", "✦═", "🌀", "❄", "◈", "⚙", "☍",
+    "⚡", "🧬", "𐓶", "❇", "🝔", "∭", "💠", "𖣔"
+)
+
+val IconStyles = listOf("Monochrome", "System Icons")
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            LimboLauncherAdvanced()
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LimboLauncherAdvanced() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("limbo_config", Context.MODE_PRIVATE) }
+
+    var bgColorHex by remember { mutableStateOf(prefs.getLong("bg_color", Color.Black.value.toLong())) }
+    var accentColorHex by remember { mutableStateOf(prefs.getLong("accent_color", Color.White.value.toLong())) }
+    var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Monochrome") ?: "Monochrome") }
+    var bgAnimation by remember { mutableStateOf(prefs.getString("bg_anim", "✦") ?: "✦") }
+
+    val bgColor = Color(bgColorHex.toULong())
+    val accentColor = Color(accentColorHex.toULong())
+
+    fun saveConfig() {
+        prefs.edit()
+            .putLong("bg_color", bgColorHex)
+            .putLong("accent_color", accentColorHex)
+            .putString("icon_style", iconStyle)
+            .putString("bg_anim", bgAnimation)
+            .apply()
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var showAppDrawer by remember { mutableStateOf(false) }
+    var showConfigMenu by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showAppDrawer || showConfigMenu) {
+        if (showConfigMenu) {
+            showConfigMenu = false
+        } else if (showAppDrawer) {
+            showAppDrawer = false
+        }
+    }
+
+    val installedApps = remember {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val pkgManager = context.packageManager
+        pkgManager.queryIntentActivities(mainIntent, 0).sortedBy {
+            it.loadLabel(pkgManager).toString().lowercase()
+        }
+    }
+
+    val pinnedPackageNames = remember {
+        val savedSet = prefs.getStringSet("pinned_apps", emptySet()) ?: emptySet()
+        mutableStateListOf(*savedSet.toTypedArray())
+    }
+
+    fun savePinnedApps() {
+        prefs.edit().putStringSet("pinned_apps", pinnedPackageNames.toSet()).apply()
+    }
+
+    val pinnedApps = installedApps.filter { pinnedPackageNames.contains(it.activityInfo.packageName) }
+    val filteredApps = installedApps.filter {
+        val appName = it.loadLabel(context.packageManager).toString()
+        appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = bgColor
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+
+            // DOCK / SEITENLEISTE
+            Column(
+                modifier = Modifier
+                    .width(70.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                    .background(bgColor, RectangleShape)
+                    .border(1.dp, accentColor, RectangleShape),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape)
+                        .combinedClickable(
+                            onClick = { 
+                                showConfigMenu = false
+                                showAppDrawer = !showAppDrawer 
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "[::]",
+                        color = accentColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(1.dp)
+                        .background(accentColor)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    pinnedApps.forEach { app ->
+                        AppIconView(
+                            appInfo = app,
+                            iconStyle = iconStyle,
+                            bgColor = bgColor,
+                            accentColor = accentColor,
+                            onClick = {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName)
+                                launchIntent?.let { context.startActivity(it) }
+                            },
+                            onLongClick = {
+                                pinnedPackageNames.remove(app.activityInfo.packageName)
+                                savePinnedApps()
+                            }
+                        )
+                    }
+                }
+            }
+
+            // HAUPTBEREICH
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(12.dp)
+            ) {
+                when {
+                    showConfigMenu -> {
+                        LimboConfigScreen(
+                            bgColor = bgColor,
+                            accentColor = accentColor,
+                            iconStyle = iconStyle,
+                            bgAnimation = bgAnimation,
+                            onBgColorChange = { 
+                                bgColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onAccentColorChange = { 
+                                accentColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onIconStyleChange = {
+                                iconStyle = it
+                                saveConfig()
+                            },
+                            onBgAnimChange = {
+                                bgAnimation = it
+                                saveConfig()
+                            },
+                            onClose = { showConfigMenu = false }
+                        )
+                    }
+                    showAppDrawer -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { 
+                                    searchQuery = it 
+                                    if (it.trim().lowercase() == "limbo config") {
+                                        showConfigMenu = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("App suchen... (oder 'Limbo Config')", color = accentColor.copy(alpha = 0.5f)) },
+                                singleLine = true,
+                                shape = RectangleShape,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = accentColor,
+                                    unfocusedBorderColor = accentColor,
+                                    focusedTextColor = accentColor,
+                                    unfocusedTextColor = accentColor,
+                                    cursorColor = accentColor
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if ("limbo config".contains(searchQuery.lowercase()) && searchQuery.isNotEmpty()) {
+                                Button(
+                                    onClick = { showConfigMenu = true },
+                                    shape = RectangleShape,
+                                    colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Text("⚙️ Limbo Config öffnen", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 75.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(filteredApps) { appInfo ->
+                                    MonochromeAppItem(
+                                        appInfo = appInfo,
+                                        iconStyle = iconStyle,
+                                        bgColor = bgColor,
+                                        accentColor = accentColor,
+                                        onClick = {
+                                            val launchIntent = context.packageManager.getLaunchIntentForPackage(appInfo.activityInfo.packageName)
+                                            launchIntent?.let { context.startActivity(it) }
+                                        },
+                                        onLongClick = {
+                                            val pkg = appInfo.activityInfo.packageName
+                                            if (!pinnedPackageNames.contains(pkg)) {
+                                                pinnedPackageNames.add(pkg)
+                                                savePinnedApps()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        AnimatedBackground(symbol = bgAnimation, accentColor = accentColor)
+
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "LIMBO OS",
+                                color = accentColor,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 4.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- ENGINE FÜR 24 ANIMIERTE HINTERGRÜNDE ---
+@Composable
+fun AnimatedBackground(symbol: String, accentColor: Color) {
+    if (symbol == "✕") return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "bg_engine")
+    val animVal by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "loop"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        when (symbol) {
+            "✦" -> { // Cosmos Stars
+                val stars = List(50) { Offset(Random(it).nextFloat(), Random(it * 2).nextFloat()) to (Random(it * 3).nextFloat() * 2.5f + 1f) }
+                stars.forEach { (pos, radius) ->
+                    val alpha = (sin((animVal * 6.28f) + pos.x * 10f) + 1f) / 2f
+                    drawCircle(color = accentColor.copy(alpha = alpha * 0.7f), radius = radius.dp.toPx(), center = Offset(pos.x * size.width, pos.y * size.height))
+                }
+            }
+            "░" -> { // Matrix Rain
+                val drops = List(30) { Random(it).nextFloat() }
+                drops.forEachIndexed { i, startX ->
+                    val y = ((animVal + i * 0.08f) % 1f) * size.height
+                    drawCircle(color = accentColor.copy(alpha = 0.8f), radius = 2.dp.toPx(), center = Offset(startX * size.width, y))
+                }
+            }
+            "⬡" -> { // Hexagon Grid
+                val radius = 30.dp.toPx()
+                val hexWidth = radius * 1.732f
+                val hexHeight = radius * 2f
+                var y = 0f
+                var row = 0
+                while (y < size.height + hexHeight) {
+                    var x = if (row % 2 == 0) 0f else hexWidth / 2f
+                    while (x < size.width + hexWidth) {
+                        val pulse = (sin(animVal * 6.28f + (x + y) * 0.01f) + 1f) / 2f
+                        drawCircle(color = accentColor.copy(alpha = pulse * 0.2f), radius = 2.dp.toPx(), center = Offset(x, y))
+                        x += hexWidth
+                    }
+                    y += hexHeight * 0.75f
+                    row++
+                }
+            }
+            "═" -> { // Cyber Wave Grid
+                val step = 50.dp.toPx()
+                val offsetAnim = animVal * step
+                var y = offsetAnim
+                while (y < size.height) {
+                    drawLine(color = accentColor.copy(alpha = 0.15f), start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    y += step
+                }
+            }
+            "◌" -> { // Ripple Waves
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val maxRadius = size.width.coerceAtLeast(size.height) * 0.7f
+                for (i in 0..2) {
+                    val r = ((animVal + i * 0.33f) % 1f) * maxRadius
+                    val alpha = (1f - (r / maxRadius)).coerceIn(0f, 1f)
+                    drawCircle(color = accentColor.copy(alpha = alpha * 0.3f), radius = r, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                }
+            }
+            "∿" -> { // Frequenz-Wellen
+                val points = 30
+                val dx = size.width / points
+                for (i in 0 until points) {
+                    val x1 = i * dx
+                    val y1 = size.height / 2f + sin(animVal * 6.28f + i * 0.3f) * 40.dp.toPx()
+                    val x2 = (i + 1) * dx
+                    val y2 = size.height / 2f + sin(animVal * 6.28f + (i + 1) * 0.3f) * 40.dp.toPx()
+                    drawLine(color = accentColor.copy(alpha = 0.4f), start = Offset(x1, y1), end = Offset(x2, y2), strokeWidth = 2.dp.toPx())
+                }
+            }
+            "𐓷" -> { // Warp Speed
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val particles = List(40) { Random(it).nextFloat() to Random(it * 3).nextFloat() * 6.28f }
+                particles.forEach { (speed, angle) ->
+                    val dist = ((animVal * speed) % 1f) * size.width * 0.6f
+                    val x = center.x + cos(angle) * dist
+                    val y = center.y + sin(angle) * dist
+                    drawCircle(color = accentColor.copy(alpha = (dist / (size.width * 0.6f)) * 0.7f), radius = 2.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "❖" -> { // Pulsing Diamonds
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 1..4) {
+                    val sz = (i * 40.dp.toPx() + animVal * 30.dp.toPx()) % (size.width * 0.5f)
+                    val alpha = 1f - (sz / (size.width * 0.5f))
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x - sz, center.y), Offset(center.x, center.y - sz), 2.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x, center.y - sz), Offset(center.x + sz, center.y), 2.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x + sz, center.y), Offset(center.x, center.y + sz), 2.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x, center.y + sz), Offset(center.x - sz, center.y), 2.dp.toPx())
+                }
+            }
+            "▲" -> { // Upward Cyber Triangles
+                for (i in 0..15) {
+                    val x = ((i * 73f) % size.width)
+                    val y = (size.height - ((animVal * size.height + i * 50f) % size.height))
+                    drawCircle(accentColor.copy(alpha = 0.25f), radius = (i % 4 + 2).dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "✦═" -> { // Crosshair Scan
+                val lineY = animVal * size.height
+                drawLine(accentColor.copy(alpha = 0.5f), Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 2.dp.toPx())
+            }
+            "🌀" -> { // Spiral Vortex
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 0..30) {
+                    val angle = animVal * 6.28f + (i * 0.2f)
+                    val r = i * 8.dp.toPx()
+                    drawCircle(accentColor.copy(alpha = 0.2f), radius = 3.dp.toPx(), center = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r))
+                }
+            }
+            "❄" -> { // Digital Snowfall
+                for (i in 0..35) {
+                    val x = (i * 37f) % size.width
+                    val y = ((animVal * size.height * 0.8f + i * 25f) % size.height)
+                    drawCircle(accentColor.copy(alpha = 0.4f), radius = 1.5.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "◈" -> { // Concentric Squares
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 1..5) {
+                    val side = (i * 35.dp.toPx() + animVal * 20.dp.toPx()) % (size.width * 0.6f)
+                    val alpha = 0.3f * (1f - (side / (size.width * 0.6f)))
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x - side, center.y - side), Offset(center.x + side, center.y - side), strokeWidth = 1.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x + side, center.y - side), Offset(center.x + side, center.y + side), strokeWidth = 1.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x + side, center.y + side), Offset(center.x - side, center.y + side), strokeWidth = 1.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x - side, center.y + side), Offset(center.x - side, center.y - side), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "⚙" -> { // Rotating Ring
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val radius = 80.dp.toPx()
+                for (i in 0..11) {
+                    val angle = animVal * 6.28f + (i * (6.28f / 12))
+                    drawCircle(accentColor.copy(alpha = 0.5f), radius = 3.dp.toPx(), center = Offset(center.x + cos(angle) * radius, center.y + sin(angle) * radius))
+                }
+            }
+            "☍" -> { // Constellation Lines
+                val pts = List(12) { Offset(((it * 83f) % size.width), ((it * 137f) % size.height)) }
+                pts.forEachIndexed { idx, p ->
+                    val animatedP = Offset(p.x, p.y + sin(animVal * 6.28f + idx) * 15f)
+                    drawCircle(accentColor.copy(alpha = 0.6f), radius = 3.dp.toPx(), center = animatedP)
+                    if (idx > 0) {
+                        drawLine(accentColor.copy(alpha = 0.15f), animatedP, pts[idx - 1], strokeWidth = 1.dp.toPx())
+                    }
+                }
+            }
+            "⚡" -> { // Pulse Vertical Grid
+                val cols = 8
+                val step = size.width / cols
+                for (i in 0 until cols) {
+                    val alpha = (sin(animVal * 6.28f + i) + 1f) / 2f
+                    drawLine(accentColor.copy(alpha = alpha * 0.2f), Offset(i * step, 0f), Offset(i * step, size.height), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "🧬" -> { // Double Helix DNA Wave
+                val points = 25
+                val dx = size.width / points
+                for (i in 0 until points) {
+                    val x = i * dx
+                    val y1 = size.height / 2f + sin(animVal * 6.28f + i * 0.4f) * 35.dp.toPx()
+                    val y2 = size.height / 2f - sin(animVal * 6.28f + i * 0.4f) * 35.dp.toPx()
+                    drawCircle(accentColor.copy(alpha = 0.5f), radius = 2.dp.toPx(), center = Offset(x, y1))
+                    drawCircle(accentColor.copy(alpha = 0.3f), radius = 2.dp.toPx(), center = Offset(x, y2))
+                    if (i % 2 == 0) drawLine(accentColor.copy(alpha = 0.1f), Offset(x, y1), Offset(x, y2), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "𐓶" -> { // Orbiting Rings
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (r in listOf(40.dp.toPx(), 80.dp.toPx(), 120.dp.toPx())) {
+                    val angle = animVal * 6.28f * (100.dp.toPx() / r)
+                    drawCircle(accentColor.copy(alpha = 0.4f), radius = 4.dp.toPx(), center = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r))
+                }
+            }
+            "❇" -> { // Sparkle Field
+                for (i in 0..20) {
+                    val x = (i * 91f) % size.width
+                    val y = (i * 143f) % size.height
+                    val scale = (sin(animVal * 12.56f + i) + 1f) / 2f
+                    drawCircle(accentColor.copy(alpha = scale * 0.6f), radius = scale * 4.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "🝔" -> { // Hourglass Flow
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val offsetY = sin(animVal * 6.28f) * 50.dp.toPx()
+                drawCircle(accentColor.copy(alpha = 0.3f), radius = 25.dp.toPx(), center = Offset(center.x, center.y + offsetY))
+            }
+            "∭" -> { // Sine Wave Cascade
+                for (wave in 0..2) {
+                    val dx = size.width / 20
+                    for (i in 0..20) {
+                        val y = size.height * (0.3f + wave * 0.2f) + sin(animVal * 6.28f + i * 0.3f + wave) * 20.dp.toPx()
+                        drawCircle(accentColor.copy(alpha = 0.25f), radius = 2.dp.toPx(), center = Offset(i * dx, y))
+                    }
+                }
+            }
+            "💠" -> { // Expanding Radial Grid
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 0..7) {
+                    val angle = i * (6.28f / 8)
+                    drawLine(accentColor.copy(alpha = 0.2f), center, Offset(center.x + cos(angle) * size.width, center.y + sin(angle) * size.width), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "𖣔" -> { // Mandala Pulse
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val petals = 6
+                val r = 50.dp.toPx() + sin(animVal * 6.28f) * 10.dp.toPx()
+                for (i in 0 until petals) {
+                    val angle = i * (6.28f / petals)
+                    drawCircle(accentColor.copy(alpha = 0.25f), radius = 15.dp.toPx(), center = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r))
+                }
+            }
+        }
+    }
+}
+
+// --- CONFIGURATION SCREEN ---
+@Composable
+fun LimboConfigScreen(
+    bgColor: Color,
+    accentColor: Color,
+    iconStyle: String,
+    bgAnimation: String,
+    onBgColorChange: (Color) -> Unit,
+    onAccentColorChange: (Color) -> Unit,
+    onIconStyleChange: (String) -> Unit,
+    onBgAnimChange: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentColor, RectangleShape)
+            .padding(12.dp)
+            .verticalScroll(scrollState)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "LIMBO CONFIG",
+                color = accentColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor)
+            ) {
+                Text("X")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // ICON STYLE SELECTION
+        Text("Icon Pack / Style:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            IconStyles.forEach { style ->
+                Button(
+                    onClick = { onIconStyleChange(style) },
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (iconStyle == style) accentColor else bgColor,
+                        contentColor = if (iconStyle == style) bgColor else accentColor
+                    ),
+                    modifier = Modifier.border(1.dp, accentColor, RectangleShape)
+                ) {
+                    Text(style, fontSize = 11.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 24 SYMBOL HINTERGRUND-WAHL
+        Text("Hintergrund-Effekte (${BackgroundStyles.size} Styles):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(6),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(160.dp).padding(top = 4.dp)
+        ) {
+            items(BackgroundStyles) { symbol ->
+                Box(
+                    modifier = Modifier
+                        .height(34.dp)
+                        .background(if (bgAnimation == symbol) accentColor else bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape)
+                        .clickable { onBgAnimChange(symbol) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = symbol,
+                        color = if (bgAnimation == symbol) bgColor else accentColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 60 HAUPTFARBEN (HINTERGRUND)
+        Text("Hauptfarbe (${AvailableColors.size} Farben):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(8),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(200.dp).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (bgColor == item.color) 3.dp else 1.dp, accentColor, RectangleShape)
+                        .clickable { onBgColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 60 AKZENTFARBEN (KONTRAST)
+        Text("Akzentfarbe (${AvailableColors.size} Farben):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(8),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(200.dp).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (accentColor == item.color) 3.dp else 1.dp, bgColor, RectangleShape)
+                        .clickable { onAccentColorChange(item.color) }
+                )
+            }
+        }
+    }
+}
+
+// --- APP ICON COMPONENT (ABSTURZSICHER) ---
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AppIconView(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = remember(appInfo) { appInfo.loadLabel(context.packageManager).toString() }
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(bgColor, RectangleShape)
+            .border(1.dp, accentColor, RectangleShape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (iconStyle == "System Icons") {
+            var iconBitmap by remember(appInfo) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+
+            LaunchedEffect(appInfo) {
+                try {
+                    val drawable = appInfo.loadIcon(context.packageManager)
+                    iconBitmap = drawable.toBitmap().asImageBitmap()
+                } catch (e: Exception) {
+                    iconBitmap = null
+                }
+            }
+
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap!!,
+                    contentDescription = appName,
+                    modifier = Modifier.size(34.dp)
+                )
+            } else {
+                Text(
+                    text = nameToInitials(appName),
+                    color = accentColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        } else {
+            Text(
+                text = nameToInitials(appName),
+                color = accentColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun MonochromeAppItem(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = remember(appInfo) { appInfo.loadLabel(context.packageManager).toString() }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(4.dp)
+    ) {
+        AppIconView(
+            appInfo = appInfo,
+            iconStyle = iconStyle,
+            bgColor = bgColor,
+            accentColor = accentColor,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = appName,
+            color = accentColor,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+fun nameToInitials(name: String): String {
+    return name.take(1).uppercase()
+}

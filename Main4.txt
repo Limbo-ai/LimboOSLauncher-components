@@ -1,0 +1,480 @@
+package com.example.limboapp
+
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.ResolveInfo
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlin.random.Random
+
+// --- FARBDETENTION & KONFIGURATION ---
+data class ColorOption(val name: String, val color: Color)
+
+val AvailableColors = listOf(
+    ColorOption("Black", Color.Black),
+    ColorOption("White", Color.White),
+    ColorOption("Red", Color(0xFFFF3B30)),
+    ColorOption("Green", Color(0xFFFF2D55)),
+    ColorOption("Green Matrix", Color(0xFF34C759)),
+    ColorOption("Blue", Color(0xFF007AFF)),
+    ColorOption("Orange", Color(0xFFFF9500)),
+    ColorOption("Purple", Color(0xFFAF52DE)),
+    ColorOption("Cyan", Color(0xFF5AC8FA)),
+    ColorOption("Yellow", Color(0xFFFFCC00))
+)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            LimboLauncherAdvanced()
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LimboLauncherAdvanced() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("limbo_config", Context.MODE_PRIVATE) }
+
+    // --- STATES FÜR EINSTELLUNGEN (PERSISTENT) ---
+    var bgColorHex by remember { mutableStateOf(prefs.getLong("bg_color", Color.Black.value.toLong())) }
+    var accentColorHex by remember { mutableStateOf(prefs.getLong("accent_color", Color.White.value.toLong())) }
+    var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Monochrome") ?: "Monochrome") }
+
+    val bgColor = Color(bgColorHex.toULong())
+    val accentColor = Color(accentColorHex.toULong())
+
+    fun saveConfig() {
+        prefs.edit()
+            .putLong("bg_color", bgColorHex)
+            .putLong("accent_color", accentColorHex)
+            .putString("icon_style", iconStyle)
+            .apply()
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var showAppDrawer by remember { mutableStateOf(false) }
+    var showConfigMenu by remember { mutableStateOf(false) }
+
+    // Zurücktaste schließt App Drawer oder Config Menu
+    BackHandler(enabled = showAppDrawer || showConfigMenu) {
+        if (showConfigMenu) {
+            showConfigMenu = false
+        } else if (showAppDrawer) {
+            showAppDrawer = false
+        }
+    }
+
+    // Apps laden
+    val installedApps = remember {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val pkgManager = context.packageManager
+        pkgManager.queryIntentActivities(mainIntent, 0).sortedBy {
+            it.loadLabel(pkgManager).toString().lowercase()
+        }
+    }
+
+    // Pinned Apps persistent speichern (über Package Names)
+    val pinnedPackageNames = remember {
+        val savedSet = prefs.getStringSet("pinned_apps", emptySet()) ?: emptySet()
+        mutableStateListOf(*savedSet.toTypedArray())
+    }
+
+    fun savePinnedApps() {
+        prefs.edit().putStringSet("pinned_apps", pinnedPackageNames.toSet()).apply()
+    }
+
+    val pinnedApps = installedApps.filter { pinnedPackageNames.contains(it.activityInfo.packageName) }
+
+    val filteredApps = installedApps.filter {
+        val appName = it.loadLabel(context.packageManager).toString()
+        appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = bgColor
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+
+            // ECKIGE UBUNTU-SEITENLEISTE
+            Column(
+                modifier = Modifier
+                    .width(70.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                    .background(bgColor, RectangleShape)
+                    .border(1.dp, accentColor, RectangleShape),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // DOCK-ICON FÜR APP DRAWER
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape)
+                        .combinedClickable(
+                            onClick = { 
+                                showConfigMenu = false
+                                showAppDrawer = !showAppDrawer 
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "[::]",
+                        color = accentColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(1.dp)
+                        .background(accentColor)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // FAVORITEN-LEISTE (PINNED APPS)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    pinnedApps.forEach { app ->
+                        val name = app.loadLabel(context.packageManager).toString()
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(bgColor, RectangleShape)
+                                .border(1.dp, accentColor, RectangleShape)
+                                .combinedClickable(
+                                    onClick = {
+                                        val launchIntent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName)
+                                        launchIntent?.let { context.startActivity(it) }
+                                    },
+                                    onLongClick = {
+                                        pinnedPackageNames.remove(app.activityInfo.packageName)
+                                        savePinnedApps()
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = name.take(1).uppercase(),
+                                color = accentColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // HAUPTBEREICH
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(12.dp)
+            ) {
+                when {
+                    showConfigMenu -> {
+                        // CONFIG MENÜ
+                        LimboConfigScreen(
+                            bgColor = bgColor,
+                            accentColor = accentColor,
+                            onBgColorChange = { 
+                                bgColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onAccentColorChange = { 
+                                accentColorHex = it.value.toLong()
+                                saveConfig()
+                            },
+                            onClose = { showConfigMenu = false }
+                        )
+                    }
+                    showAppDrawer -> {
+                        // APP DRAWER
+                        Column(modifier = Modifier.fillMaxSize()) {
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { 
+                                    searchQuery = it 
+                                    if (it.trim().lowercase() == "limbo config") {
+                                        showConfigMenu = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("App suchen... (oder 'Limbo Config')", color = accentColor.copy(alpha = 0.5f)) },
+                                singleLine = true,
+                                shape = RectangleShape,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = accentColor,
+                                    unfocusedBorderColor = accentColor,
+                                    focusedTextColor = accentColor,
+                                    unfocusedTextColor = accentColor,
+                                    cursorColor = accentColor
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Schnell-Button für Limbo Config falls gesucht
+                            if ("limbo config".contains(searchQuery.lowercase()) && searchQuery.isNotEmpty()) {
+                                Button(
+                                    onClick = { showConfigMenu = true },
+                                    shape = RectangleShape,
+                                    colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Text("⚙️ Limbo Config öffnen", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 75.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(filteredApps) { appInfo ->
+                                    MonochromeAppItem(
+                                        appInfo = appInfo,
+                                        bgColor = bgColor,
+                                        accentColor = accentColor,
+                                        onClick = {
+                                            val launchIntent = context.packageManager.getLaunchIntentForPackage(appInfo.activityInfo.packageName)
+                                            launchIntent?.let { context.startActivity(it) }
+                                        },
+                                        onLongClick = {
+                                            val pkg = appInfo.activityInfo.packageName
+                                            if (!pinnedPackageNames.contains(pkg)) {
+                                                pinnedPackageNames.add(pkg)
+                                                savePinnedApps()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        // HOME SCREEN MIT STERNE-HINTERGRUND
+                        StarryBackground(accentColor = accentColor)
+
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "LIMBO OS",
+                                color = accentColor,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 4.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- STERNE ANIMATION HINTERGRUND ---
+@Composable
+fun StarryBackground(accentColor: Color) {
+    val stars = remember {
+        List(40) {
+            Offset(Random.nextFloat(), Random.nextFloat()) to Random.nextFloat() * 2f + 1f
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "stars")
+    val alphaAnim by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        stars.forEach { (pos, radius) ->
+            drawCircle(
+                color = accentColor.copy(alpha = alphaAnim * 0.7f),
+                radius = radius.dp.toPx(),
+                center = Offset(pos.x * size.width, pos.y * size.height)
+            )
+        }
+    }
+}
+
+// --- CONFIGURATION SCREEN ---
+@Composable
+fun LimboConfigScreen(
+    bgColor: Color,
+    accentColor: Color,
+    onBgColorChange: (Color) -> Unit,
+    onAccentColorChange: (Color) -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentColor, RectangleShape)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "LIMBO CONFIG",
+                color = accentColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor)
+            ) {
+                Text("X")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Hauptfarbe (Hintergrund):", color = accentColor, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(5),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.height(90.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (bgColor == item.color) 3.dp else 1.dp, accentColor, RectangleShape)
+                        .clickable { onBgColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Akzentfarbe (Text / Ränder):", color = accentColor, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(5),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.height(90.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (accentColor == item.color) 3.dp else 1.dp, bgColor, RectangleShape)
+                        .clickable { onAccentColorChange(item.color) }
+                )
+            }
+        }
+    }
+}
+
+// --- APP ITEM ---
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun MonochromeAppItem(
+    appInfo: ResolveInfo,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = appInfo.loadLabel(context.packageManager).toString()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .background(bgColor, RectangleShape)
+                .border(1.dp, accentColor, RectangleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = appName.take(1).uppercase(),
+                color = accentColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = appName,
+            color = accentColor,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}

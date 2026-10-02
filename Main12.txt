@@ -1,0 +1,1346 @@
+package com.example.limboapp
+
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ResolveInfo
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import android.net.Uri
+import android.os.BatteryManager
+import android.os.Bundle
+import android.os.Process
+import android.os.SystemClock
+import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import kotlin.concurrent.thread
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
+
+// --- ADVANCED AUDIO ENGINE ---
+object LimboSoundEngine {
+    var soundEnabled = true
+    var volume = 0.5f
+    var soundType = "Cyber Bell"
+
+    fun playSound(pitchMultiplier: Float = 1.0f) {
+        if (!soundEnabled || volume <= 0.01f) return
+        thread {
+            try {
+                val sampleRate = 22050
+                val durationMs = when (soundType) {
+                    "Digital Ring" -> 100
+                    "Glitch Beep" -> 50
+                    else -> 140
+                }
+                val numSamples = durationMs * sampleRate / 1000
+                val buffer = ShortArray(numSamples)
+
+                val baseFreq1 = when (soundType) {
+                    "Digital Ring" -> 1046.50f
+                    "Glitch Beep" -> 520.0f
+                    else -> 880.0f
+                }
+                val baseFreq2 = if (soundType == "Digital Ring") 1318.51f else 1174.66f
+
+                val f1 = baseFreq1 * pitchMultiplier
+                val f2 = baseFreq2 * pitchMultiplier
+
+                for (i in 0 until numSamples) {
+                    val t = i.toDouble() / sampleRate
+                    val envelope = Math.exp(-t * (if (soundType == "Digital Ring") 28.0 else 18.0))
+                    
+                    val wave1 = if (soundType == "Glitch Beep") {
+                        if ((t * 120).toInt() % 2 == 0) 0.7 else -0.7
+                    } else {
+                        Math.sin(2.0 * Math.PI * f1 * t)
+                    }
+                    val wave2 = Math.sin(2.0 * Math.PI * f2 * t) * 0.4
+                    val ringMod = if (soundType == "Digital Ring") Math.sin(2.0 * Math.PI * 40.0 * t) else 1.0
+
+                    val sampleValue = ((wave1 + wave2) * 0.5 * ringMod * envelope * Short.MAX_VALUE * volume).toInt()
+                    buffer[i] = sampleValue.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(buffer.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                track.write(buffer, 0, buffer.size)
+                track.play()
+                Thread.sleep(durationMs.toLong())
+                track.release()
+            } catch (_: Exception) {}
+        }
+    }
+}
+
+data class ColorOption(val name: String, val color: Color)
+
+val AvailableColors = listOf(
+    ColorOption("Black", Color(0xFF000000)), ColorOption("Void", Color(0xFF080808)),
+    ColorOption("Dark Charcoal", Color(0xFF121212)), ColorOption("Onyx", Color(0xFF1A1A1A)),
+    ColorOption("Graphite", Color(0xFF262626)), ColorOption("Slate", Color(0xFF333333)),
+    ColorOption("Ash Gray", Color(0xFF4A4A4A)), ColorOption("Medium Gray", Color(0xFF666666)),
+    ColorOption("Silver", Color(0xFF888888)), ColorOption("Light Gray", Color(0xFFB0B0B0)),
+    ColorOption("Platinum", Color(0xFFE0E0E0)), ColorOption("White", Color(0xFFFFFFFF)),
+
+    ColorOption("Cyber Cyan", Color(0xFF00F0FF)), ColorOption("Electric Cyan", Color(0xFF00E5FF)),
+    ColorOption("Matrix Green", Color(0xFF00FF66)), ColorOption("Acid Green", Color(0xFF39FF14)),
+    ColorOption("Neon Yellow", Color(0xFFFFE600)), ColorOption("Hyper Gold", Color(0xFFFFB700)),
+    ColorOption("Neon Orange", Color(0xFFFF5500)), ColorOption("Neon Pink", Color(0xFFFF007F)),
+    ColorOption("Hot Magenta", Color(0xFFFF00D4)), ColorOption("Electric Blue", Color(0xFF0066FF)),
+    ColorOption("Laser Violet", Color(0xFF8A00FF)), ColorOption("Plasma Red", Color(0xFFFF0800)),
+
+    ColorOption("Deep Red", Color(0xFF4A0000)), ColorOption("Blood Red", Color(0xFF8B0000)),
+    ColorOption("Crimson", Color(0xFFDC143C)), ColorOption("Pure Red", Color(0xFFFF0000)),
+    ColorOption("Ruby", Color(0xFFE0115F)), ColorOption("Coral Red", Color(0xFFFF4040)),
+    ColorOption("Sunset", Color(0xFFFF5722)), ColorOption("Rust", Color(0xFFB7410E)),
+    ColorOption("Maroon", Color(0xFF500000)), ColorOption("Burgundy", Color(0xFF800020)),
+    ColorOption("Rose Dark", Color(0xFF880E4F)), ColorOption("Rose Light", Color(0xFFFF80AB)),
+
+    ColorOption("Dark Amber", Color(0xFF4A2800)), ColorOption("Bronze", Color(0xFF8C5000)),
+    ColorOption("Copper", Color(0xFFB87333)), ColorOption("Burnt Orange", Color(0xFFCC5500)),
+    ColorOption("Pure Orange", Color(0xFFFF6600)), ColorOption("Amber", Color(0xFFFF9900)),
+    ColorOption("Gold", Color(0xFFFFD700)), ColorOption("Sand", Color(0xFFE6C280)),
+    ColorOption("Peach", Color(0xFFFFB380)), ColorOption("Mango", Color(0xFFFF8C00)),
+    ColorOption("Mustard", Color(0xFFE1AD01)), ColorOption("Warm Gold", Color(0xFFCC9900)),
+
+    ColorOption("Abyssal Green", Color(0xFF002200)), ColorOption("Dark Forest", Color(0xFF004D1A)),
+    ColorOption("Forest", Color(0xFF1B5E20)), ColorOption("Emerald", Color(0xFF00A86B)),
+    ColorOption("Jade", Color(0xFF00C853)), ColorOption("Pure Green", Color(0xFF00FF00)),
+    ColorOption("Lime", Color(0xFF76FF03)), ColorOption("Mint", Color(0xFFA8FFE8)),
+    ColorOption("Olive Dark", Color(0xFF333300)), ColorOption("Olive Light", Color(0xFF808000)),
+    ColorOption("Seafoam", Color(0xFF93E9BE)), ColorOption("Teal Dark", Color(0xFF004D40)),
+
+    ColorOption("Teal", Color(0xFF008080)), ColorOption("Deep Teal", Color(0xFF005B5C)),
+    ColorOption("Turquoise", Color(0xFF40E0D0)), ColorOption("Aqua", Color(0xFF00FFFF)),
+    ColorOption("Dark Aqua", Color(0xFF008B8B)), ColorOption("Celeste", Color(0xFFB2FFFF)),
+    ColorOption("Ice", Color(0xFFE0FFFF)), ColorOption("Glacier", Color(0xFFA0E7E5)),
+    ColorOption("Sky Cyan", Color(0xFF80DAEB)), ColorOption("Ocean", Color(0xFF006994)),
+    ColorOption("Deep Ocean", Color(0xFF00334E)), ColorOption("Abyssal Teal", Color(0xFF001F24)),
+
+    ColorOption("Midnight", Color(0xFF000A1A)), ColorOption("Deep Navy", Color(0xFF001133)),
+    ColorOption("Navy", Color(0xFF000080)), ColorOption("Royal Blue", Color(0xFF1A237E)),
+    ColorOption("Cobalt", Color(0xFF0047AB)), ColorOption("Pure Blue", Color(0xFF0000FF)),
+    ColorOption("Dodger Blue", Color(0xFF1E90FF)), ColorOption("Sky Blue", Color(0xFF87CEEB)),
+    ColorOption("Baby Blue", Color(0xFF89CFF0)), ColorOption("Steel Blue", Color(0xFF4682B4)),
+    ColorOption("Indigo Dark", Color(0xFF1A0033)), ColorOption("Indigo", Color(0xFF3F51B5)),
+
+    ColorOption("Void Purple", Color(0xFF11001C)), ColorOption("Deep Purple", Color(0xFF311B92)),
+    ColorOption("Dark Violet", Color(0xFF4B0082)), ColorOption("Purple", Color(0xFF800080)),
+    ColorOption("Pure Violet", Color(0xFF8B00FF)), ColorOption("Amethyst", Color(0xFF9966CC)),
+    ColorOption("Lavender", Color(0xFFE6E6FA)), ColorOption("Lilac", Color(0xFFC8A2C8)),
+    ColorOption("Orchid", Color(0xFFDA70D6)), ColorOption("Plum", Color(0xFF8E4585)),
+    ColorOption("Magenta Dark", Color(0xFF4A0033)), ColorOption("Magenta", Color(0xFFFF00FF)),
+
+    ColorOption("Pastel Red", Color(0xFFFFB3BA)), ColorOption("Pastel Orange", Color(0xFFFFDFBA)),
+    ColorOption("Pastel Yellow", Color(0xFFFFDF9E)), ColorOption("Pastel Green", Color(0xFFBAFFC9)),
+    ColorOption("Pastel Mint", Color(0xFFB5EAD7)), ColorOption("Pastel Cyan", Color(0xFFC7CEEA)),
+    ColorOption("Pastel Blue", Color(0xFFAEC6CF)), ColorOption("Pastel Violet", Color(0xFFDCD0FF)),
+    ColorOption("Pastel Pink", Color(0xFFF4C2C2)), ColorOption("Dusty Rose", Color(0xFFDCAE96)),
+    ColorOption("Muted Gray Blue", Color(0xFF4F5D75)), ColorOption("Slate Light", Color(0xFF708090)),
+
+    ColorOption("Radioactive", Color(0xFFC6FF00)), ColorOption("Toxic Violet", Color(0xFFDF00FF)),
+    ColorOption("Vapor Pink", Color(0xFFFF71CE)), ColorOption("Cyber Yellow", Color(0xFFFFF000)),
+    ColorOption("Ultra Blue", Color(0xFF0033FF)), ColorOption("Hyper Orange", Color(0xFFFF3300)),
+    ColorOption("Infrared", Color(0xFFFF0055)), ColorOption("Neon Green", Color(0xFF00FF33)),
+    ColorOption("Terminal Green", Color(0xFF00FF00)), ColorOption("Deep Slate", Color(0xFF1C2833)),
+    ColorOption("Dark Crimson", Color(0xFF1A0003)), ColorOption("Absolute Black", Color(0xFF010101))
+)
+
+val BackgroundStyles = listOf(
+    "✦", "░", "⬡", "═", "◌", "∿", "𐓷", "✕", "❖", "▲",
+    "✦═", "🌀", "❄", "◈", "⚙", "☍", "⚡", "🧬", "𐓶", "❇",
+    "🝔", "∭", "💠", "𖣔", "𖤓", "☖", "𖢥", "♾", "⊕", "✦✦",
+    "⎔", "∯", "✵", "𖣠", "⌬", "🜁"
+)
+
+val IconStyles = listOf("Monochrome", "System Icons")
+val SoundTypes = listOf("Cyber Bell", "Digital Ring", "Glitch Beep")
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            LimboLauncherAdvanced()
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LimboLauncherAdvanced() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("limbo_config", Context.MODE_PRIVATE) }
+
+    var bgColorHex by remember { mutableStateOf(prefs.getLong("bg_color", Color.Black.value.toLong())) }
+    var accentColorHex by remember { mutableStateOf(prefs.getLong("accent_color", Color.White.value.toLong())) }
+    var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Monochrome") ?: "Monochrome") }
+    var bgAnimation by remember { mutableStateOf(prefs.getString("bg_anim", "✦") ?: "✦") }
+    var soundActive by remember { mutableStateOf(prefs.getBoolean("sound_active", true)) }
+    var soundVolume by remember { mutableFloatStateOf(prefs.getFloat("sound_volume", 0.5f)) }
+    var selectedSoundType by remember { mutableStateOf(prefs.getString("sound_type", "Cyber Bell") ?: "Cyber Bell") }
+
+    LimboSoundEngine.soundEnabled = soundActive
+    LimboSoundEngine.volume = soundVolume
+    LimboSoundEngine.soundType = selectedSoundType
+
+    val bgColor = Color(bgColorHex.toULong())
+    val accentColor = Color(accentColorHex.toULong())
+
+    fun saveConfig() {
+        prefs.edit()
+            .putLong("bg_color", bgColorHex)
+            .putLong("accent_color", accentColorHex)
+            .putString("icon_style", iconStyle)
+            .putString("bg_anim", bgAnimation)
+            .putBoolean("sound_active", soundActive)
+            .putFloat("sound_volume", soundVolume)
+            .putString("sound_type", selectedSoundType)
+            .apply()
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var showAppDrawer by remember { mutableStateOf(false) }
+    var showConfigMenu by remember { mutableStateOf(false) }
+    var showSysMonitor by remember { mutableStateOf(false) }
+
+    var selectedAppContextMenu by remember { mutableStateOf<ResolveInfo?>(null) }
+
+    BackHandler(enabled = selectedAppContextMenu != null || showAppDrawer || showConfigMenu || showSysMonitor) {
+        LimboSoundEngine.playSound(0.8f)
+        when {
+            selectedAppContextMenu != null -> selectedAppContextMenu = null
+            showSysMonitor -> showSysMonitor = false
+            showConfigMenu -> showConfigMenu = false
+            showAppDrawer -> showAppDrawer = false
+        }
+    }
+
+    val installedApps = remember {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val pkgManager = context.packageManager
+        pkgManager.queryIntentActivities(mainIntent, 0).sortedBy {
+            it.loadLabel(pkgManager).toString().lowercase()
+        }
+    }
+
+    val pinnedPackageNames = remember {
+        val savedSet = prefs.getStringSet("pinned_apps", emptySet()) ?: emptySet()
+        mutableStateListOf(*savedSet.toTypedArray())
+    }
+
+    fun savePinnedApps() {
+        prefs.edit().putStringSet("pinned_apps", pinnedPackageNames.toSet()).apply()
+    }
+
+    val pinnedApps = installedApps.filter { pinnedPackageNames.contains(it.activityInfo.packageName) }
+    val filteredApps = installedApps.filter {
+        val appName = it.loadLabel(context.packageManager).toString()
+        appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = bgColor
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize()) {
+
+                // DOCK / SEITENLEISTE
+                Column(
+                    modifier = Modifier
+                        .width(70.dp)
+                        .fillMaxHeight()
+                        .padding(vertical = 8.dp, horizontal = 4.dp)
+                        .background(bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(bgColor, RectangleShape)
+                            .border(1.dp, accentColor, RectangleShape)
+                            .clickable {
+                                LimboSoundEngine.playSound(1.2f)
+                                showConfigMenu = false
+                                showSysMonitor = false
+                                selectedAppContextMenu = null
+                                showAppDrawer = !showAppDrawer
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "[::]",
+                            color = accentColor,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(1.dp)
+                            .background(accentColor)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        pinnedApps.forEach { app ->
+                            AppIconView(
+                                appInfo = app,
+                                iconStyle = iconStyle,
+                                bgColor = bgColor,
+                                accentColor = accentColor,
+                                onClick = {
+                                    LimboSoundEngine.playSound(1.4f)
+                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName)
+                                    launchIntent?.let { context.startActivity(it) }
+                                },
+                                onLongClick = {
+                                    LimboSoundEngine.playSound(0.7f)
+                                    selectedAppContextMenu = app
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // HAUPTBEREICH
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(12.dp)
+                ) {
+                    when {
+                        showSysMonitor -> {
+                            SystemMonitorOverlay(
+                                accentColor = accentColor,
+                                bgColor = bgColor,
+                                onClose = {
+                                    LimboSoundEngine.playSound(0.8f)
+                                    showSysMonitor = false
+                                }
+                            )
+                        }
+                        showConfigMenu -> {
+                            LimboConfigScreen(
+                                bgColor = bgColor,
+                                accentColor = accentColor,
+                                iconStyle = iconStyle,
+                                bgAnimation = bgAnimation,
+                                soundActive = soundActive,
+                                soundVolume = soundVolume,
+                                selectedSoundType = selectedSoundType,
+                                onBgColorChange = {
+                                    LimboSoundEngine.playSound(1.0f)
+                                    bgColorHex = it.value.toLong()
+                                    saveConfig()
+                                },
+                                onAccentColorChange = {
+                                    LimboSoundEngine.playSound(1.1f)
+                                    accentColorHex = it.value.toLong()
+                                    saveConfig()
+                                },
+                                onIconStyleChange = {
+                                    LimboSoundEngine.playSound(1.0f)
+                                    iconStyle = it
+                                    saveConfig()
+                                },
+                                onBgAnimChange = {
+                                    LimboSoundEngine.playSound(1.05f)
+                                    bgAnimation = it
+                                    saveConfig()
+                                },
+                                onSoundToggle = {
+                                    soundActive = !soundActive
+                                    LimboSoundEngine.soundEnabled = soundActive
+                                    LimboSoundEngine.playSound(1.2f)
+                                    saveConfig()
+                                },
+                                onVolumeChange = {
+                                    soundVolume = it
+                                    LimboSoundEngine.volume = it
+                                    saveConfig()
+                                },
+                                onSoundTypeChange = {
+                                    selectedSoundType = it
+                                    LimboSoundEngine.soundType = it
+                                    LimboSoundEngine.playSound(1.0f)
+                                    saveConfig()
+                                },
+                                onClose = {
+                                    LimboSoundEngine.playSound(0.8f)
+                                    showConfigMenu = false
+                                }
+                            )
+                        }
+                        showAppDrawer -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = {
+                                        searchQuery = it
+                                        LimboSoundEngine.playSound(0.9f)
+                                        val queryClean = it.trim().lowercase()
+                                        if (queryClean == "limbo config" || queryClean == "config") {
+                                            LimboSoundEngine.playSound(1.3f)
+                                            showConfigMenu = true
+                                        } else if (queryClean == "top" || queryClean == "sys") {
+                                            LimboSoundEngine.playSound(1.3f)
+                                            showSysMonitor = true
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("App suchen...", color = accentColor.copy(alpha = 0.5f)) },
+                                    singleLine = true,
+                                    shape = RectangleShape,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = accentColor,
+                                        unfocusedBorderColor = accentColor,
+                                        focusedTextColor = accentColor,
+                                        unfocusedTextColor = accentColor,
+                                        cursorColor = accentColor
+                                    )
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                LazyVerticalGrid(
+                                    columns = GridCells.Adaptive(minSize = 75.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(filteredApps) { appInfo ->
+                                        MonochromeAppItem(
+                                            appInfo = appInfo,
+                                            iconStyle = iconStyle,
+                                            bgColor = bgColor,
+                                            accentColor = accentColor,
+                                            onClick = {
+                                                LimboSoundEngine.playSound(1.4f)
+                                                val launchIntent = context.packageManager.getLaunchIntentForPackage(appInfo.activityInfo.packageName)
+                                                launchIntent?.let { context.startActivity(it) }
+                                            },
+                                            onLongClick = {
+                                                LimboSoundEngine.playSound(0.9f)
+                                                selectedAppContextMenu = appInfo
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            // HOMESCREEN
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .combinedClickable(
+                                        onClick = {
+                                            // Kurzer Klick = Sys Monitor
+                                            LimboSoundEngine.playSound(1.5f)
+                                            showSysMonitor = true
+                                        },
+                                        onLongClick = {
+                                            // Langer Klick = Config-Menü
+                                            LimboSoundEngine.playSound(1.3f)
+                                            showConfigMenu = true
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AnimatedBackground(symbol = bgAnimation, accentColor = accentColor)
+
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "LIMBO OS V9.1",
+                                        color = accentColor,
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 4.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "[ Halten für Config | Klick für Sys ]",
+                                        color = accentColor.copy(alpha = 0.5f),
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // APP KONTEXT-MENÜ POPUP
+            selectedAppContextMenu?.let { app ->
+                val pkgName = app.activityInfo.packageName
+                val appLabel = app.loadLabel(context.packageManager).toString()
+                val isPinned = pinnedPackageNames.contains(pkgName)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .clickable {
+                            LimboSoundEngine.playSound(0.7f)
+                            selectedAppContextMenu = null
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .width(260.dp)
+                            .background(bgColor)
+                            .border(1.dp, accentColor, RectangleShape)
+                            .padding(16.dp)
+                            .clickable(enabled = false) {},
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = appLabel.uppercase(),
+                            color = accentColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(accentColor))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                LimboSoundEngine.playSound(1.2f)
+                                if (isPinned) {
+                                    pinnedPackageNames.remove(pkgName)
+                                } else {
+                                    pinnedPackageNames.add(pkgName)
+                                }
+                                savePinnedApps()
+                                selectedAppContextMenu = null
+                            },
+                            shape = RectangleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = bgColor, contentColor = accentColor),
+                            modifier = Modifier.fillMaxWidth().border(1.dp, accentColor, RectangleShape)
+                        ) {
+                            Text(if (isPinned) "Aus Leiste entfernen" else "In Leiste pinnen", fontSize = 12.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                LimboSoundEngine.playSound(1.1f)
+                                selectedAppContextMenu = null
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", pkgName, null)
+                                }
+                                context.startActivity(intent)
+                            },
+                            shape = RectangleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = bgColor, contentColor = accentColor),
+                            modifier = Modifier.fillMaxWidth().border(1.dp, accentColor, RectangleShape)
+                        ) {
+                            Text("App-Informationen", fontSize = 12.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                LimboSoundEngine.playSound(0.6f)
+                                selectedAppContextMenu = null
+                                val intent = Intent(Intent.ACTION_DELETE).apply {
+                                    data = Uri.parse("package:$pkgName")
+                                }
+                                context.startActivity(intent)
+                            },
+                            shape = RectangleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = bgColor, contentColor = accentColor),
+                            modifier = Modifier.fillMaxWidth().border(1.dp, accentColor, RectangleShape)
+                        ) {
+                            Text("Deinstallieren", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- SYSTEM MONITOR DASHBOARD ---
+@Composable
+fun SystemMonitorOverlay(
+    accentColor: Color,
+    bgColor: Color,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    var memoryUsage by remember { mutableStateOf("Berechne...") }
+    var batteryLevel by remember { mutableIntStateOf(0) }
+    var uptimeString by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val runtime = Runtime.getRuntime()
+        val usedMemMB = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        val maxMemMB = runtime.maxMemory() / (1024 * 1024)
+        memoryUsage = "$usedMemMB MB / $maxMemMB MB"
+
+        val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        batteryLevel = if (level != -1 && scale != -1) ((level.toFloat() / scale.toFloat()) * 100).toInt() else 0
+
+        val uptimeSec = SystemClock.elapsedRealtime() / 1000
+        val hours = uptimeSec / 3600
+        val mins = (uptimeSec % 3600) / 60
+        uptimeString = "${hours}h ${mins}m"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentColor, RectangleShape)
+            .background(bgColor)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SYSTEM STATUS [DEBUG]",
+                color = accentColor,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor)
+            ) {
+                Text("X")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("• HEAP RAM: $memoryUsage", color = accentColor, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• BATTERY: $batteryLevel%", color = accentColor, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• UPTIME: $uptimeString", color = accentColor, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• CPU THREADS: ${Runtime.getRuntime().availableProcessors()}", color = accentColor, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("• PID: ${Process.myPid()}", color = accentColor, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(accentColor)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "KERNEL STATUS: OK\nSHELL: ARCH/LINUX EMULATION\nREADY FOR TERMINAL COMMANDS...",
+            color = accentColor.copy(alpha = 0.7f),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp
+        )
+    }
+}
+
+// --- ENGINE FÜR ANIMIERTE HINTERGRÜNDE ---
+@Composable
+fun AnimatedBackground(symbol: String, accentColor: Color) {
+    if (symbol == "✕") return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "bg_engine")
+    val animVal by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "loop"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        when (symbol) {
+            "✦" -> {
+                val stars = List(50) { Offset(Random(it).nextFloat(), Random(it * 2).nextFloat()) to (Random(it * 3).nextFloat() * 2.5f + 1f) }
+                stars.forEach { (pos, radius) ->
+                    val alpha = (sin((animVal * 6.28f) + pos.x * 10f) + 1f) / 2f
+                    drawCircle(color = accentColor.copy(alpha = alpha * 0.7f), radius = radius.dp.toPx(), center = Offset(pos.x * size.width, pos.y * size.height))
+                }
+            }
+            "░" -> {
+                val drops = List(30) { Random(it).nextFloat() }
+                drops.forEachIndexed { i, startX ->
+                    val y = ((animVal + i * 0.08f) % 1f) * size.height
+                    drawCircle(color = accentColor.copy(alpha = 0.8f), radius = 2.dp.toPx(), center = Offset(startX * size.width, y))
+                }
+            }
+            "⬡" -> {
+                val radius = 30.dp.toPx()
+                val hexWidth = radius * 1.732f
+                val hexHeight = radius * 2f
+                var y = 0f
+                var row = 0
+                while (y < size.height + hexHeight) {
+                    var x = if (row % 2 == 0) 0f else hexWidth / 2f
+                    while (x < size.width + hexWidth) {
+                        val pulse = (sin(animVal * 6.28f + (x + y) * 0.01f) + 1f) / 2f
+                        drawCircle(color = accentColor.copy(alpha = pulse * 0.2f), radius = 2.dp.toPx(), center = Offset(x, y))
+                        x += hexWidth
+                    }
+                    y += hexHeight * 0.75f
+                    row++
+                }
+            }
+            "═" -> {
+                val step = 50.dp.toPx()
+                val offsetAnim = animVal * step
+                var y = offsetAnim
+                while (y < size.height) {
+                    drawLine(color = accentColor.copy(alpha = 0.15f), start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    y += step
+                }
+            }
+            "◌" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val maxRadius = size.width.coerceAtLeast(size.height) * 0.7f
+                for (i in 0..2) {
+                    val r = ((animVal + i * 0.33f) % 1f) * maxRadius
+                    val alpha = (1f - (r / maxRadius)).coerceIn(0f, 1f)
+                    drawCircle(color = accentColor.copy(alpha = alpha * 0.3f), radius = r, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                }
+            }
+            "∿" -> {
+                val points = 30
+                val dx = size.width / points
+                for (i in 0 until points) {
+                    val x1 = i * dx
+                    val y1 = size.height / 2f + sin(animVal * 6.28f + i * 0.3f) * 40.dp.toPx()
+                    val x2 = (i + 1) * dx
+                    val y2 = size.height / 2f + sin(animVal * 6.28f + (i + 1) * 0.3f) * 40.dp.toPx()
+                    drawLine(color = accentColor.copy(alpha = 0.4f), start = Offset(x1, y1), end = Offset(x2, y2), strokeWidth = 2.dp.toPx())
+                }
+            }
+            "𐓷" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val particles = List(40) { Random(it).nextFloat() to Random(it * 3).nextFloat() * 6.28f }
+                particles.forEach { (speed, angle) ->
+                    val dist = ((animVal * speed) % 1f) * size.width * 0.6f
+                    val x = center.x + cos(angle) * dist
+                    val y = center.y + sin(angle) * dist
+                    drawCircle(color = accentColor.copy(alpha = (dist / (size.width * 0.6f)) * 0.7f), radius = 2.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "❖" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 1..4) {
+                    val sz = (i * 40.dp.toPx() + animVal * 30.dp.toPx()) % (size.width * 0.5f)
+                    val alpha = 1f - (sz / (size.width * 0.5f))
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x - sz, center.y), Offset(center.x, center.y - sz), 2.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x, center.y - sz), Offset(center.x + sz, center.y), 2.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x + sz, center.y), Offset(center.x, center.y + sz), 2.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha * 0.3f), Offset(center.x, center.y + sz), Offset(center.x - sz, center.y), 2.dp.toPx())
+                }
+            }
+            "▲" -> {
+                for (i in 0..15) {
+                    val x = ((i * 73f) % size.width)
+                    val y = (size.height - ((animVal * size.height + i * 50f) % size.height))
+                    drawCircle(accentColor.copy(alpha = 0.25f), radius = (i % 4 + 2).dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "✦═" -> {
+                val lineY = animVal * size.height
+                drawLine(accentColor.copy(alpha = 0.5f), Offset(0f, lineY), Offset(size.width, lineY), strokeWidth = 2.dp.toPx())
+            }
+            "🌀" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 0..30) {
+                    val angle = animVal * 6.28f + (i * 0.2f)
+                    val r = i * 8.dp.toPx()
+                    drawCircle(accentColor.copy(alpha = 0.2f), radius = 3.dp.toPx(), center = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r))
+                }
+            }
+            "❄" -> {
+                for (i in 0..35) {
+                    val x = (i * 37f) % size.width
+                    val y = ((animVal * size.height * 0.8f + i * 25f) % size.height)
+                    drawCircle(accentColor.copy(alpha = 0.4f), radius = 1.5.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "◈" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 1..5) {
+                    val side = (i * 35.dp.toPx() + animVal * 20.dp.toPx()) % (size.width * 0.6f)
+                    val alpha = 0.3f * (1f - (side / (size.width * 0.6f)))
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x - side, center.y - side), Offset(center.x + side, center.y - side), strokeWidth = 1.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x + side, center.y - side), Offset(center.x + side, center.y + side), strokeWidth = 1.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x + side, center.y + side), Offset(center.x - side, center.y + side), strokeWidth = 1.dp.toPx())
+                    drawLine(accentColor.copy(alpha = alpha), Offset(center.x - side, center.y + side), Offset(center.x - side, center.y - side), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "⚙" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val radius = 80.dp.toPx()
+                for (i in 0..11) {
+                    val angle = animVal * 6.28f + (i * (6.28f / 12))
+                    drawCircle(accentColor.copy(alpha = 0.5f), radius = 3.dp.toPx(), center = Offset(center.x + cos(angle) * radius, center.y + sin(angle) * radius))
+                }
+            }
+            "☍" -> {
+                val pts = List(12) { Offset(((it * 83f) % size.width), ((it * 137f) % size.height)) }
+                pts.forEachIndexed { idx, p ->
+                    val animatedP = Offset(p.x, p.y + sin(animVal * 6.28f + idx) * 15f)
+                    drawCircle(accentColor.copy(alpha = 0.6f), radius = 3.dp.toPx(), center = animatedP)
+                    if (idx > 0) drawLine(accentColor.copy(alpha = 0.15f), animatedP, pts[idx - 1], strokeWidth = 1.dp.toPx())
+                }
+            }
+            "⚡" -> {
+                val cols = 8
+                val step = size.width / cols
+                for (i in 0 until cols) {
+                    val alpha = (sin(animVal * 6.28f + i) + 1f) / 2f
+                    drawLine(accentColor.copy(alpha = alpha * 0.2f), Offset(i * step, 0f), Offset(i * step, size.height), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "🧬" -> {
+                val points = 25
+                val dx = size.width / points
+                for (i in 0 until points) {
+                    val x = i * dx
+                    val y1 = size.height / 2f + sin(animVal * 6.28f + i * 0.4f) * 35.dp.toPx()
+                    val y2 = size.height / 2f - sin(animVal * 6.28f + i * 0.4f) * 35.dp.toPx()
+                    drawCircle(accentColor.copy(alpha = 0.5f), radius = 2.dp.toPx(), center = Offset(x, y1))
+                    drawCircle(accentColor.copy(alpha = 0.3f), radius = 2.dp.toPx(), center = Offset(x, y2))
+                    if (i % 2 == 0) drawLine(accentColor.copy(alpha = 0.1f), Offset(x, y1), Offset(x, y2), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "𐓶" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (r in listOf(40.dp.toPx(), 80.dp.toPx(), 120.dp.toPx())) {
+                    val angle = animVal * 6.28f * (100.dp.toPx() / r)
+                    drawCircle(accentColor.copy(alpha = 0.4f), radius = 4.dp.toPx(), center = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r))
+                }
+            }
+            "❇" -> {
+                for (i in 0..20) {
+                    val x = (i * 91f) % size.width
+                    val y = (i * 143f) % size.height
+                    val scale = (sin(animVal * 12.56f + i) + 1f) / 2f
+                    drawCircle(accentColor.copy(alpha = scale * 0.6f), radius = scale * 4.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "🝔" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val offsetY = sin(animVal * 6.28f) * 50.dp.toPx()
+                drawCircle(accentColor.copy(alpha = 0.3f), radius = 25.dp.toPx(), center = Offset(center.x, center.y + offsetY))
+            }
+            "∭" -> {
+                for (wave in 0..2) {
+                    val dx = size.width / 20
+                    for (i in 0..20) {
+                        val y = size.height * (0.3f + wave * 0.2f) + sin(animVal * 6.28f + i * 0.3f + wave) * 20.dp.toPx()
+                        drawCircle(accentColor.copy(alpha = 0.25f), radius = 2.dp.toPx(), center = Offset(i * dx, y))
+                    }
+                }
+            }
+            "💠" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 0..7) {
+                    val angle = i * (6.28f / 8)
+                    drawLine(accentColor.copy(alpha = 0.2f), center, Offset(center.x + cos(angle) * size.width, center.y + sin(angle) * size.width), strokeWidth = 1.dp.toPx())
+                }
+            }
+            "𖣔" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val petals = 6
+                val r = 50.dp.toPx() + sin(animVal * 6.28f) * 10.dp.toPx()
+                for (i in 0 until petals) {
+                    val angle = i * (6.28f / petals)
+                    drawCircle(accentColor.copy(alpha = 0.25f), radius = 15.dp.toPx(), center = Offset(center.x + cos(angle) * r, center.y + sin(angle) * r))
+                }
+            }
+            "𖤓" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val rays = 16
+                for (i in 0 until rays) {
+                    val angle = i * (6.28f / rays) + animVal * 0.5f
+                    val length = (size.width * 0.4f) + sin(animVal * 6.28f + i) * 20.dp.toPx()
+                    drawLine(accentColor.copy(alpha = 0.2f), center, Offset(center.x + cos(angle) * length, center.y + sin(angle) * length), strokeWidth = 2.dp.toPx())
+                }
+            }
+            "☖" -> {
+                val sizeStep = 40.dp.toPx()
+                for (x in 0..(size.width / sizeStep).toInt() + 2) {
+                    for (y in 0..(size.height / sizeStep).toInt() + 2) {
+                        val posX = x * sizeStep
+                        val posY = y * sizeStep + (animVal * sizeStep)
+                        drawCircle(accentColor.copy(alpha = 0.15f), radius = 1.5.dp.toPx(), center = Offset(posX, posY % size.height))
+                    }
+                }
+            }
+            "𖢥" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val angle = animVal * 6.28f
+                val sweepRadius = size.width.coerceAtMost(size.height) * 0.4f
+                drawCircle(accentColor.copy(alpha = 0.15f), radius = sweepRadius, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()))
+                drawLine(accentColor.copy(alpha = 0.5f), center, Offset(center.x + cos(angle) * sweepRadius, center.y + sin(angle) * sweepRadius), strokeWidth = 2.dp.toPx())
+            }
+            "♾" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 0..40) {
+                    val t = (animVal * 6.28f) + (i * 0.15f)
+                    val scale = 120.dp.toPx()
+                    val x = center.x + (scale * cos(t)) / (1 + sin(t) * sin(t))
+                    val y = center.y + (scale * sin(t) * cos(t)) / (1 + sin(t) * sin(t))
+                    drawCircle(accentColor.copy(alpha = 0.4f), radius = 2.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "⊕" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val r = 60.dp.toPx() + sin(animVal * 6.28f) * 15.dp.toPx()
+                drawCircle(accentColor.copy(alpha = 0.3f), radius = r, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                drawLine(accentColor.copy(alpha = 0.3f), Offset(center.x - r - 20, center.y), Offset(center.x + r + 20, center.y), strokeWidth = 1.5.dp.toPx())
+                drawLine(accentColor.copy(alpha = 0.3f), Offset(center.x, center.y - r - 20), Offset(center.x, center.y + r + 20), strokeWidth = 1.5.dp.toPx())
+            }
+            "✦✦" -> {
+                for (i in 0..30) {
+                    val x = (i * 103f) % size.width
+                    val y = ((animVal * size.height + i * 70f) % size.height)
+                    drawCircle(accentColor.copy(alpha = 0.35f), radius = 2.5.dp.toPx(), center = Offset(x, y))
+                }
+            }
+            "⎔" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val s1 = 40.dp.toPx() + sin(animVal * 6.28f) * 10.dp.toPx()
+                val s2 = 80.dp.toPx() + cos(animVal * 6.28f) * 10.dp.toPx()
+                drawRect(accentColor.copy(alpha = 0.2f), topLeft = Offset(center.x - s1, center.y - s1), size = androidx.compose.ui.geometry.Size(s1 * 2, s1 * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                drawRect(accentColor.copy(alpha = 0.2f), topLeft = Offset(center.x - s2, center.y - s2), size = androidx.compose.ui.geometry.Size(s2 * 2, s2 * 2), style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+            }
+            "∯" -> {
+                val dx = size.width / 15
+                for (i in 0..15) {
+                    val y = size.height / 2f + sin(animVal * 6.28f + i * 0.5f) * 60.dp.toPx()
+                    drawCircle(accentColor.copy(alpha = 0.3f), radius = 6.dp.toPx(), center = Offset(i * dx, y))
+                }
+            }
+            "✵" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val pulse = (sin(animVal * 12.56f) + 1f) * 20.dp.toPx()
+                drawCircle(accentColor.copy(alpha = 0.4f), radius = 10.dp.toPx() + pulse, center = center)
+            }
+            "𖣠" -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                for (i in 0..50) {
+                    val a = animVal * 6.28f + (i * 0.15f)
+                    val r = i * 4.dp.toPx()
+                    drawCircle(accentColor.copy(alpha = 0.25f), radius = 2.dp.toPx(), center = Offset(center.x + cos(a) * r, center.y + sin(a) * r))
+                }
+            }
+            "⌬" -> {
+                val cols = 5
+                val stepX = size.width / cols
+                for (i in 0..cols) {
+                    val posY = (animVal * size.height + i * 100f) % size.height
+                    drawCircle(accentColor.copy(alpha = 0.25f), radius = 12.dp.toPx(), center = Offset(i * stepX, posY), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                }
+            }
+            "🜁" -> {
+                val columns = 20
+                val colWidth = size.width / columns
+                for (i in 0 until columns) {
+                    val speed = (i % 5 + 1) * 0.2f
+                    val yHead = ((animVal * speed * size.height + i * 80f) % (size.height * 1.2f)) - 100f
+                    for (j in 0..10) {
+                        val yTrail = yHead - (j * 18.dp.toPx())
+                        if (yTrail in 0f..size.height) {
+                            val alpha = 1f - (j / 10f)
+                            drawCircle(
+                                color = accentColor.copy(alpha = alpha * 0.5f),
+                                radius = 2.dp.toPx(),
+                                center = Offset(i * colWidth + (colWidth / 2f), yTrail)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- CONFIGURATION SCREEN ---
+@Composable
+fun LimboConfigScreen(
+    bgColor: Color,
+    accentColor: Color,
+    iconStyle: String,
+    bgAnimation: String,
+    soundActive: Boolean,
+    soundVolume: Float,
+    selectedSoundType: String,
+    onBgColorChange: (Color) -> Unit,
+    onAccentColorChange: (Color) -> Unit,
+    onIconStyleChange: (String) -> Unit,
+    onBgAnimChange: (String) -> Unit,
+    onSoundToggle: () -> Unit,
+    onVolumeChange: (Float) -> Unit,
+    onSoundTypeChange: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(1.dp, accentColor, RectangleShape)
+            .padding(12.dp)
+            .verticalScroll(scrollState)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "LIMBO CONFIG V9.1",
+                color = accentColor,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onClose,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor, contentColor = bgColor)
+            ) {
+                Text("X")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Audio Sound Effects:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Button(
+                onClick = onSoundToggle,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (soundActive) accentColor else bgColor,
+                    contentColor = if (soundActive) bgColor else accentColor
+                ),
+                modifier = Modifier.border(1.dp, accentColor, RectangleShape)
+            ) {
+                Text(if (soundActive) "ON" else "OFF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text("Sound Profil:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            SoundTypes.forEach { type ->
+                Button(
+                    onClick = { onSoundTypeChange(type) },
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedSoundType == type) accentColor else bgColor,
+                        contentColor = if (selectedSoundType == type) bgColor else accentColor
+                    ),
+                    modifier = Modifier.border(1.dp, accentColor, RectangleShape)
+                ) {
+                    Text(type, fontSize = 11.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text("Sound Lautstärke: ${(soundVolume * 100).toInt()}%", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Slider(
+            value = soundVolume,
+            onValueChange = {
+                onVolumeChange(it)
+                LimboSoundEngine.playSound(0.8f + it * 0.4f)
+            },
+            valueRange = 0.0f..1.0f,
+            colors = SliderDefaults.colors(
+                thumbColor = accentColor,
+                activeTrackColor = accentColor,
+                inactiveTrackColor = accentColor.copy(alpha = 0.3f)
+            ),
+            modifier = Modifier.padding(vertical = 0.dp)
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text("Icon Pack / Style:", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            IconStyles.forEach { style ->
+                Button(
+                    onClick = { onIconStyleChange(style) },
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (iconStyle == style) accentColor else bgColor,
+                        contentColor = if (iconStyle == style) bgColor else accentColor
+                    ),
+                    modifier = Modifier.border(1.dp, accentColor, RectangleShape)
+                ) {
+                    Text(style, fontSize = 11.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("Hintergrund-Effekte (${BackgroundStyles.size} Styles):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(210.dp).padding(top = 4.dp)
+        ) {
+            items(BackgroundStyles) { symbol ->
+                Box(
+                    modifier = Modifier
+                        .height(34.dp)
+                        .background(if (bgAnimation == symbol) accentColor else bgColor, RectangleShape)
+                        .border(1.dp, accentColor, RectangleShape)
+                        .clickable { onBgAnimChange(symbol) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = symbol,
+                        color = if (bgAnimation == symbol) bgColor else accentColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("Hintergrundfarbe (${AvailableColors.size} Farben):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(10),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(280.dp).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (bgColor == item.color) 3.dp else 1.dp, accentColor, RectangleShape)
+                        .clickable { onBgColorChange(item.color) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("Akzentfarbe (${AvailableColors.size} Farben):", color = accentColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(10),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.height(280.dp).padding(top = 4.dp)
+        ) {
+            items(AvailableColors) { item ->
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(item.color, RectangleShape)
+                        .border(if (accentColor == item.color) 3.dp else 1.dp, bgColor, RectangleShape)
+                        .clickable { onAccentColorChange(item.color) }
+                )
+            }
+        }
+    }
+}
+
+// --- APP ICON COMPONENT ---
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AppIconView(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = remember(appInfo) { appInfo.loadLabel(context.packageManager).toString() }
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(bgColor, RectangleShape)
+            .border(1.dp, accentColor, RectangleShape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (iconStyle == "System Icons") {
+            var iconBitmap by remember(appInfo) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+
+            LaunchedEffect(appInfo) {
+                try {
+                    val drawable = appInfo.loadIcon(context.packageManager)
+                    iconBitmap = drawable.toBitmap().asImageBitmap()
+                } catch (_: Exception) {
+                    iconBitmap = null
+                }
+            }
+
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap!!,
+                    contentDescription = appName,
+                    modifier = Modifier.size(34.dp)
+                )
+            } else {
+                Text(
+                    text = nameToInitials(appName),
+                    color = accentColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        } else {
+            Text(
+                text = nameToInitials(appName),
+                color = accentColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun MonochromeAppItem(
+    appInfo: ResolveInfo,
+    iconStyle: String,
+    bgColor: Color,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = remember(appInfo) { appInfo.loadLabel(context.packageManager).toString() }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(4.dp)
+    ) {
+        AppIconView(
+            appInfo = appInfo,
+            iconStyle = iconStyle,
+            bgColor = bgColor,
+            accentColor = accentColor,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = appName,
+            color = accentColor,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+fun nameToInitials(name: String): String {
+    return name.take(1).uppercase()
+}

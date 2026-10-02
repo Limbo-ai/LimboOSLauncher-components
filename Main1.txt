@@ -1,0 +1,241 @@
+package com.example.limboapp
+
+import android.content.Intent
+import android.content.pm.ResolveInfo
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            LimboLauncherMonochrome()
+        }
+    }
+}
+
+@Composable
+fun LimboLauncherMonochrome() {
+    val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+    var showAppDrawer by remember { mutableStateOf(false) }
+
+    // Alle installierten Apps laden
+    val installedApps = remember {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val pkgManager = context.packageManager
+        pkgManager.queryIntentActivities(mainIntent, 0).sortedBy {
+            it.loadLabel(pkgManager).toString()
+        }
+    }
+
+    // Filter für die Suche
+    val filteredApps = installedApps.filter {
+        val appName = it.loadLabel(context.packageManager).toString()
+        appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    // Pinned Apps im Dock (Favorites)
+    val pinnedApps = remember { mutableStateListOf<ResolveInfo>() }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(0xFF000000) // Reinstes OLED-Schwarz
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+
+            // --- UBUNTU MOBILE SEITENLEISTE (MONOCHROM) ---
+            Column(
+                modifier = Modifier
+                    .width(76.dp)
+                    .fillMaxHeight()
+                    .padding(8.dp)
+                    .background(Color(0xFF000000), RoundedCornerShape(20.dp))
+                    .border(1.dp, Color.White, RoundedCornerShape(20.dp)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // GALAXY ICON (App Drawer Switcher)
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .background(Color.Black, CircleShape)
+                        .border(1.dp, Color.White, CircleShape)
+                        .clickable { showAppDrawer = !showAppDrawer },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🌌", fontSize = 24.sp)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(modifier = Modifier.width(40.dp), color = Color.White, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // PINNED FAVOURITE APPS LEISTE
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    pinnedApps.forEach { app ->
+                        val name = app.loadLabel(context.packageManager).toString()
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color.Black, RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.White, RoundedCornerShape(12.dp))
+                                .clickable {
+                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName)
+                                    launchIntent?.let { context.startActivity(it) }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = name.take(1).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- RECHTER HAUPTBEREICH (DESKTOP & DRAWER) ---
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(16.dp)
+            ) {
+                if (showAppDrawer) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+
+                        // INTEGRATIVE SUCHLEISTE (WEISSER RAND / SCHWARZER GRUND)
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("App suchen...", color = Color.Gray) },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.White,
+                                unfocusedBorderColor = Color.White,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                cursorColor = Color.White
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // APP GRID WITH WHITE BORDERS
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 80.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(filteredApps) { appInfo ->
+                                MonochromeAppItem(
+                                    appInfo = appInfo,
+                                    onClick = {
+                                        val launchIntent = context.packageManager.getLaunchIntentForPackage(appInfo.activityInfo.packageName)
+                                        launchIntent?.let { context.startActivity(it) }
+                                    },
+                                    onLongClick = {
+                                        if (!pinnedApps.contains(appInfo)) {
+                                            pinnedApps.add(appInfo)
+                                        } else {
+                                            pinnedApps.remove(appInfo)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // DESKTOP HOME BEREICH
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "LIMBO OS",
+                            color = Color.White,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 4.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MonochromeAppItem(
+    appInfo: ResolveInfo,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val appName = appInfo.loadLabel(context.packageManager).toString()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(Color.Black, RoundedCornerShape(14.dp))
+                .border(1.dp, Color.White, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = appName.take(1).uppercase(),
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = appName,
+            color = Color.White,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
